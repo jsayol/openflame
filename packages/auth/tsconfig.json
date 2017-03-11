@@ -1,0 +1,28 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "stripInternal": true,
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+    "module": "es2015",
+    "moduleResolution": "node",
+    "noEmitOnError": false,
+//    "noImplicitAny": true,
+    "rootDir": "..",
+    "outDir": "./release",
+    "declaration": true,
+    "declarationDir": "./release/typings",
+    "sourceMap": true,
+    "inlineSources": false,
+    "lib": [
+      "es2015",
+      "dom"
+    ],
+    "target": "es5",
+    "skipLibCheck": true,
+    "importHelpers": true
+  },
+  "include": [
+    "./src/index.ts"
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "name": "@openflame/source",
+  "description": "Monorepo for Openflame development",
+  "author": "Josep Sayol <josep.sayol@gmail.com>",
+  "license": "MIT",
+  "scripts": {
+    "build": "lerna run clean && npm run build:core && npm run build:database && npm run build:auth",
+    "build:core": "cd packages/core && npm run build",
+    "build:database": "cd packages/database && npm run build",
+    "build:auth": "cd packages/auth && npm run build",
+    "clean": "lerna run clean",
+    "postinstall": "lerna bootstrap"
+  },
+  "devDependencies": {
+    "lerna": "2.0.0-beta.38"
+  }
+}

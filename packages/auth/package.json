@@ -1,0 +1,41 @@
+{
+  "name": "@openflame/auth",
+  "version": "0.0.1",
+  "description": "Authentication component for Openflame: An alternative, RxJS-based SDK for Firebase",
+  "author": "Josep Sayol <josep.sayol@gmail.com>",
+  "main": "release/bundles/auth.umd.js",
+  "module": "release/auth/src/index.js",
+  "types": "release/typings/auth/src/index.d.ts",
+  "license": "MIT",
+  "scripts": {
+    "build": "npm run build:js && npm run build:umd:dev && npm run build:umd:prod",
+    "build:js": "tsc -p tsconfig.json",
+    "build:umd:dev": "cross-env NODE_ENV=dev webpack",
+    "build:umd:prod": "cross-env NODE_ENV=production webpack -p",
+    "clean": "rimraf release",
+    "copy": "cpy README.md ../../LICENSE release && node ../../utils/copy-package-json.js auth",
+    "prebuild": "npm run clean",
+    "postbuild": "npm run copy"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jsayol/openflame.git"
+  },
+  "dependencies": {
+    "firebase": "3.7.0",
+    "tslib": "^1.6.0"
+  },
+  "peerDependencies": {
+    "@openflame/core": "0.0.1",
+    "rxjs": "^5.2.0"
+  },
+  "devDependencies": {
+    "@openflame/core": "*",
+    "cpy-cli": "^1.0.1",
+    "cross-env": "^3.2.3",
+    "rimraf": "^2.6.1",
+    "rxjs": "^5.2.0",
+    "typescript": "^2.1.6",
+    "webpack": "^2.2.1"
+  }
+}
