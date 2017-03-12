@@ -37,9 +37,9 @@ Openflame has been built with modularity in mind from the very beginning, even i
 Using only the database:
 ```ts
 import { Openflame } from '@openflame/core';
+import { DataSnapshot } from '@openflame/database';
 
 import '@openflame/core/add/database';
-import { DataSnapshot } from '@openflame/database';
 
 const openflame = new Openflame({
   apiKey: "...",
@@ -60,12 +60,14 @@ newMessage$.subscribe((snap: DataSnapshot) => {
 Using authentication and the database:
 ```ts
 import { Openflame } from '@openflame/core';
+import { DataSnapshot } from '@openflame/database';
+import { User } from '@openflame/auth';
 
 import '@openflame/core/add/database';
-import { DataSnapshot } from '@openflame/database';
-
 import '@openflame/core/add/auth';
-import { User } from '@openflame/auth';
+
+import 'rxjs/add/operator/takeUntil';
+import 'rxjs/add/operator/switchMap';
 
 const openflame = new Openflame({
   apiKey: "...",
