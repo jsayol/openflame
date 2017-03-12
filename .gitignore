@@ -1,5 +1,5 @@
 ### Release files
-packages/*/release/
+/packages/*/release
 
 ### Node
 # Logs
