@@ -2,11 +2,20 @@ import { AuthCredential, AuthProvider } from './auth';
 import * as firebase from 'firebase/app';
 
 export class User implements firebase.User {
-  private _instances: {[uid: string]: User} = {};
+  private static _instances: { [uid: string]: User } = {};
+
+  /**
+   * Gets the `User` instance given a `firebase.User`, or creates a new one if it doesn't exist.
+   * It prevents creating a new `User` instance every time openflame.auth.currentUser is called.
+   * @param firebaseUser
+   * @returns {User}
+   * @private
+   */
+  static _get(firebaseUser: firebase.User): User {
+    return this._instances[firebaseUser.uid] || (this._instances[firebaseUser.uid] = new User(firebaseUser));
+  }
 
   constructor(private _firebaseUser: firebase.User) {
-    // This prevents creating a new `User` instance every time openflame.auth().currentUser is called
-    return this._instances[_firebaseUser.uid] || (this._instances[_firebaseUser.uid] = this);
   }
 
 

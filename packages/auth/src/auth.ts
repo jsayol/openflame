@@ -90,7 +90,7 @@ export class Auth implements OpenflameComponent {
   }
 
   get currentUser(): User {
-    return new User(this._firebaseAuth.currentUser);
+    return User._get(this._firebaseAuth.currentUser);
   }
 
   applyActionCode(code: string): Promise<any> {
