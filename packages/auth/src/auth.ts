@@ -4,9 +4,7 @@ import { User } from './user';
 import { Observer } from 'rxjs/Observer';
 import { Observable } from 'rxjs/Observable';
 import 'rxjs/add/operator/share';
-import 'rxjs/add/operator/observeOn';
 import 'rxjs/add/operator/filter';
-import 'rxjs/add/operator/delay';
 import 'rxjs/add/operator/do';
 import 'rxjs/add/operator/partition';
 import 'rxjs/add/operator/map';
@@ -46,28 +44,6 @@ export class Auth implements OpenflameComponent {
     // An observable that emits whenever there's an auth state change
     this.authStateChanged$ = Observable.create((observer: Observer<User>) => this.onAuthStateChanged(observer)).share();
 
-    // this.authStateChanged$.subscribe((user: User) => {
-    //   const msg: OpenflameComponentMessage = {
-    //     app: this.app,
-    //     from: 'auth',
-    //     event: 'authStateChanged',
-    //     payload: {user}
-    //   };
-    //
-    //   OpenflameComponent.message$.next(msg);
-    // });
-
-    // Subscribe to auth state changes so that we can notify other Openflame components, like the database
-    this.authStateChanged$
-      .map<User, OpenflameComponentMessage>((user: User) => ({
-          app: this.app,
-          from: 'auth',
-          event: 'authStateChanged',
-          payload: {user}
-        })
-      )
-      .subscribe(OpenflameComponent.message$);
-
     const [signOut$, initiallySingedOut$]: Array<Observable<User>> = this.authStateChanged$
       .partition((auth: User) => !auth && !!this._currentUser);
 
@@ -100,6 +76,17 @@ export class Auth implements OpenflameComponent {
       .refCount()
       .filter((isSignedIn: boolean) => isSignedIn !== undefined)
       .distinctUntilChanged();
+
+    // Let's subscribe to auth state changes so that we can notify other Openflame components, like the database
+    this.authStateChanged$
+      .map<User, OpenflameComponentMessage>((user: User) => ({
+          app: this.app,
+          from: 'auth',
+          event: 'authStateChanged',
+          payload: {user}
+        })
+      )
+      .subscribe(OpenflameComponent.message$);
   }
 
   get currentUser(): User {
