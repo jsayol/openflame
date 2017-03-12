@@ -5,7 +5,7 @@
 Openflame is an open source, RxJS-based SDK for Firebase being developed as an alternative to the official Web SDK. It is not intended as a drop-in replacement.
  
 ## But... why?
-To be honest, this started just for fun. I wanted to learn what the SDK was really doing behind the scenes and figure out how and when it communicated with the Firebase servers, so one weekend I started looking into it.
+This started just for fun, to be honest. I wanted to learn what the SDK was really doing behind the scenes and figure out how and when it communicated with the Firebase servers, so one weekend I started looking into it.
 
 The communication part was easy. I could simply use the SDK to attach listeners, or change data, or do any other operation and then monitor the WebSocket frames being sent back an forth.
 
@@ -13,7 +13,7 @@ Figuring out what was actually happening on the client side, though, was trickie
 
 
 ## Components
-Openflame has been built with modularity in mind from the very beginning, even if only the database part o the SDK has been implemented for now. It's published as several independent packages, each adding the functionality of one the Firebase services.
+Openflame has been built with modularity in mind from the very beginning, even if only the database part of the SDK has been implemented for now. It's published as several independent packages, each adding the functionality of one the Firebase services.
 
 * #### `@openflame/core`
 
@@ -33,6 +33,30 @@ Openflame has been built with modularity in mind from the very beginning, even i
   ***Not implemented yet.*** Would allow access to Firebase Cloud Messaging (FCM).
 
 ## Examples
+
+Using only the database:
+```ts
+import { Openflame } from '@openflame/core';
+import { DataSnapshot } from '@openflame/database';
+import '@openflame/core/add/database';
+
+const openflame = new Openflame({
+  apiKey: "...",
+  authDomain: "...",
+  databaseURL: "...",
+  storageBucket: "...",
+  messagingSenderId: "..."
+});
+
+// NOTE: `childAdded$` hasn't been implemented yet
+const newMessage$ = openflame.database.ref('/messages').childAdded$;
+
+newMessage$.subscribe((snap: DataSnapshot) => {
+  console.log(`Hey, new message! It says:`, snap.child('content').val());
+);
+```
+
+Using authentication and the database:
 ```ts
 import { Openflame } from '@openflame/core';
 import { DataSnapshot } from '@openflame/database';
@@ -48,31 +72,23 @@ const openflame = new Openflame({
   messagingSenderId: "..."
 });
 
-// NOTE: `childAdded` hasn't been implemented yet
-const newMessage$ = openflame.database.ref('/messages').childAdded$;
-
-newMessage$.subscribe((snap: DataSnapshot) => {
-  console.log(`Hey, new message! It says:`, snap.val());
-);
-
 const private$ = openflame.auth.signIn$
   .switchMap((user: User) => openflame.database
     .ref(`private/${user.uid}`)
     .value$
     .takeUntil(openflame.auth.signOut$)
-  )
+  );
   
 private$.subscribe((snap: DataSnapshot) => {
-  const uid = openflame.auth.currentUser.uid;
-  console.log(`Private value for ${uid}:`, snap.val())
+  const displayName = openflame.auth.currentUser.displayName;
+  console.log(`Private value for ${displayName}:`, snap.val())
 });
 
 ```
-
 ## Developing
-```bash
-git clone https://github.com/jsayol/openflame.git
-cd openflame
-yarn install
-yarn run build
+```sh
+$ git clone https://github.com/jsayol/openflame.git
+$ cd openflame
+$ yarn install
+$ yarn run build
 ```
