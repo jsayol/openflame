@@ -10,7 +10,7 @@ delete devPackage.devDependencies;
 const releasePackage = Object.assign(devPackage, {
   main: devPackage.main.replace(/^release\//, './'),
   module: devPackage.module.replace(/^release\//, './'),
-  // types: devPackage.types.replace(/^release\//, './'),
+  typings: devPackage.typings.replace(/^release\//, './'),
 });
 
 writeFileSync(
