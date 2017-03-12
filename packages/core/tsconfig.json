@@ -4,6 +4,12 @@
     "paths": {
       "@openflame/core": [
         "./src"
+      ],
+      "@openflame/auth": [
+        "../auth/src"
+      ],
+      "@openflame/database": [
+        "../database/src"
       ]
     },
     "stripInternal": true,
@@ -12,11 +18,10 @@
     "module": "es2015",
     "moduleResolution": "node",
     "noEmitOnError": false,
-//    "noImplicitAny": true,
+    // "noImplicitAny": true,
     "rootDir": "..",
-    "outDir": "./release",
+    "outDir": "./release/tmp",
     "declaration": true,
-    "declarationDir": "./release/typings",
     "sourceMap": true,
     "inlineSources": false,
     "lib": [
@@ -24,14 +29,19 @@
       "dom"
     ],
     "target": "es5",
+    "pretty": true,
     "skipLibCheck": true,
     "importHelpers": true
   },
   "include": [
-    "./src/**/*.ts"
+    "./src",
+    "./add"
   ],
   "exclude": [
-    "../auth",
-    "../database"
+    "@openflame/core/**/*",
+    "@openflame/auth/**/*",
+    "@openflame/database/**/*",
+    "../auth/**/*",
+    "../database/**/*"
   ]
 }

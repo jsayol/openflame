@@ -4,18 +4,19 @@
   "description": "Core component for Openflame: An alternative, RxJS-based SDK for Firebase",
   "author": "Josep Sayol <josep.sayol@gmail.com>",
   "main": "release/bundles/core.umd.js",
-  "module": "release/core/src/index.js",
-  "types": "release/typings/core/index.d.ts",
+  "module": "release/src/index.js",
   "license": "MIT",
   "scripts": {
-    "build": "npm run build:js && npm run build:umd:dev && npm run build:umd:prod",
-    "build:js": "tsc -p tsconfig.json",
+    "build": "npm run build:js && npm run build:umd",
+    "build:js": "tsc -p tsconfig.json && npm run build:js:post",
+    "build:js:post": "cpr ./release/tmp/core ./release && rimraf ./release/tmp",
+    "build:umd": "npm run build:umd:dev && npm run build:umd:prod",
     "build:umd:dev": "cross-env NODE_ENV=dev webpack",
     "build:umd:prod": "cross-env NODE_ENV=production webpack -p",
     "clean": "rimraf release",
-    "copy": "cpy README.md ../../LICENSE release && node ../../utils/copy-package-json.js core",
+    "release": "cpy README.md ../../LICENSE ./release && node ../../utils/copy-package-json.js core",
     "prebuild": "npm run clean",
-    "postbuild": "npm run copy"
+    "postbuild": "npm run release"
   },
   "repository": {
     "type": "git",
@@ -25,6 +26,7 @@
     "rxjs": "^5.2.0"
   },
   "dependencies": {
+    "cpr": "^2.0.2",
     "tslib": "^1.6.0"
   },
   "devDependencies": {

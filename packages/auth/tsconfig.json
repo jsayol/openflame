@@ -7,11 +7,10 @@
     "module": "es2015",
     "moduleResolution": "node",
     "noEmitOnError": false,
-//    "noImplicitAny": true,
-    "rootDir": "..",
-    "outDir": "./release",
+    // "noImplicitAny": true,
+    "rootDir": "./src",
+    "outDir": "./release/src",
     "declaration": true,
-    "declarationDir": "./release/typings",
     "sourceMap": true,
     "inlineSources": false,
     "lib": [
@@ -23,6 +22,9 @@
     "importHelpers": true
   },
   "include": [
-    "./src/index.ts"
+    "./src"
+  ],
+  "exclude": [
+    "@openflame/**/*"
   ]
 }

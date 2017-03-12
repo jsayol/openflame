@@ -9,7 +9,8 @@
     "build:database": "cd packages/database && npm run build",
     "build:auth": "cd packages/auth && npm run build",
     "clean": "lerna run clean",
-    "postinstall": "lerna bootstrap"
+    "postinstall": "lerna bootstrap",
+    "reboot": "npm run clean && lerna clean --yes && lerna bootstrap"
   },
   "devDependencies": {
     "lerna": "2.0.0-beta.38"
