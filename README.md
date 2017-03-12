@@ -2,7 +2,7 @@
 :fire: :fire: :fire: ![stability-experimental](https://img.shields.io/badge/stability-experimental-orange.svg) :fire: :fire: :fire:
 
 ## What is it?
-Openflame is an open source, RxJS-based SDK for Firebase being developed as an alternative to the official Web SDK. It is not intended as a drop-in replacement.
+Openflame is an RxJS-based, open-source SDK for Firebase being developed as an alternative to the official web SDK. It is not intended as a drop-in replacement.
  
 ## But... why?
 This started just for fun, to be honest. I wanted to learn what the SDK was really doing behind the scenes and figure out how and when it communicated with the Firebase servers, so one weekend I started looking into it.
