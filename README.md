@@ -2,7 +2,7 @@
 :fire: :fire: :fire: ![stability-experimental](https://img.shields.io/badge/stability-experimental-orange.svg) :fire: :fire: :fire:
 
 ## What is it?
-Openflame is an opensoruce, RxJS-based SDK for Firebase being developed as an alternative to the official Web SDK. It is not intended as a drop-in replacement.
+Openflame is an open source, RxJS-based SDK for Firebase being developed as an alternative to the official Web SDK. It is not intended as a drop-in replacement.
  
 ## But... why?
 To be honest, this started just for fun. I wanted to learn what the SDK was really doing behind the scenes and figure out how and when it communicated with the Firebase servers, so one weekend I started looking into it.
@@ -36,7 +36,9 @@ Openflame has been built with modularity in mind from the very beginning, even i
 ```ts
 import { Openflame } from '@openflame/core';
 import { DataSnapshot } from '@openflame/database';
+import { User } from '@openflame/auth';
 import '@openflame/core/add/database';
+import '@openflame/core/add/auth';
 
 const openflame = new Openflame({
   apiKey: "...",
@@ -46,9 +48,31 @@ const openflame = new Openflame({
   messagingSenderId: "..."
 });
 
-const newMessage$ = openflame.database.ref('/messages').childAdded;
+/ NOTE: `childAdded` hasn't been implemented yet
+const newMessage$ = openflame.database.ref('/messages').childAdded$;
 
 newMessage$.subscribe((snap: DataSnapshot) => {
-  console.log(`Hey, new message!`, snap.val());
+  console.log(`Hey, new message! It says:`, snap.val());
 );
+
+const private$ = openflame.auth.signIn$
+  .switchMap((user: User) => openflame.database
+    .ref(`private/${user.uid}`)
+    .value$
+    .takeUntil(openflame.auth.signOut$)
+  )
+  
+private$.subscribe((snap: DataSnapshot) => {
+  const uid = openflame.auth.currentUser.uid;
+  console.log(`Private value for ${uid}:`, snap.val())
+});
+
+```
+
+## Developing
+```bash
+git clone https://github.com/jsayol/openflame.git
+cd openflame
+yarn install
+yarn run build
 ```
