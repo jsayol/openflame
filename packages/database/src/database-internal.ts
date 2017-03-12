@@ -42,6 +42,8 @@ export class DatabaseInternal {
   private _projectName: string;
   private _useProjectName: boolean = false;
   private _keepAliveHandler: any;
+  private _ready = false;
+  private _dataMessageQueue: any[] = [];
   private _serverInfo: ServerInfo = {timeDiff: 0};
   private _reqCounter: number = 1;
   private _sentRequests: { [k: number]: SentDataRequest } = {};
@@ -150,8 +152,8 @@ export class DatabaseInternal {
     const path = listener.query.path;
 
     return !listener.query.hasQuery() && this._dataListeners.some((other: DataListener) => {
-      return (listener !== other) && path.includesOrEqualTo(other.query.path);
-    });
+        return (listener !== other) && path.includesOrEqualTo(other.query.path);
+      });
   }
 
   removeListener(listenerToRemove: DataListener) {
@@ -203,6 +205,17 @@ export class DatabaseInternal {
 
   sendDataMessage(type: string, query: Query | null, payload: any): Promise<any> {
     return new Promise((resolve, reject) => {
+      if (!this._ready) {
+        this._dataMessageQueue.push({
+          resolve,
+          reject,
+          type,
+          query,
+          payload,
+        });
+        return;
+      }
+
       const id = this._reqCounter++;
       const data = {
         r: id,
@@ -538,12 +551,55 @@ export class DatabaseInternal {
       sessionKey: d['s'],
     };
 
+    this._ready = true;
+
     this.sendDataMessage('s', null, {
       c: {
         [SDK_VERSION]: 1
       }
     });
 
+    // Make sure we send any requests that had been added to the queue while we were connecting to the database
+    this.flushDataMessageQueue();
+  }
+
+  /**
+   * Sends any data messages that had been queued while the connection to the database was being initialized.
+   */
+  private flushDataMessageQueue() {
+    // First of all, let's check if there's auth messages in the queue.
+    // If there's any, we only keep the last one and discard the rest.
+    let auth = null;
+    const queue: any[] = [];
+    this._dataMessageQueue.forEach((msg: any) => {
+      if (msg['type'] === 'auth')
+        auth = msg;
+      else
+        queue.push(msg);
+    });
+
+    const sendQueuedMessage = (msg: any) => {
+      const {resolve, reject, type, query, payload} = msg;
+      this.resendDataMessage({
+        resolve,
+        reject,
+        query,
+        data: {
+          r: 0, // this will be discarded
+          a: type,
+          b: payload
+        }
+      });
+    };
+
+    // Send the auth message first, if there's one
+    if (auth)
+      sendQueuedMessage(auth);
+
+    // Send the rest of the queue
+    while (queue.length > 0) {
+      sendQueuedMessage(queue.shift());
+    }
   }
 
   private processData(data: any) {
