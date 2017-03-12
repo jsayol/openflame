@@ -1,7 +1,7 @@
-import { Openflame } from '../core';
+import { Openflame } from '../src/core';
 import { Auth } from '@openflame/auth';
 
-declare module '../core' {
+declare module '../src/core' {
   interface Openflame {
     readonly auth: Auth;
   }

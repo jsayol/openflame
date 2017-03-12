@@ -1,7 +1,7 @@
-import { Openflame } from '../core';
+import { Openflame } from '../src/core';
 import { Database } from '@openflame/database';
 
-declare module '../core' {
+declare module '../src/core' {
   interface Openflame {
     readonly database: Database;
   }
