@@ -3,6 +3,16 @@ import { User } from './user';
 
 import { Observer } from 'rxjs/Observer';
 import { Observable } from 'rxjs/Observable';
+import 'rxjs/add/operator/share';
+import 'rxjs/add/operator/observeOn';
+import 'rxjs/add/operator/filter';
+import 'rxjs/add/operator/delay';
+import 'rxjs/add/operator/do';
+import 'rxjs/add/operator/partition';
+import 'rxjs/add/operator/map';
+import 'rxjs/add/operator/merge';
+import 'rxjs/add/operator/publishBehavior';
+import 'rxjs/add/operator/distinctUntilChanged';
 
 import * as firebase from 'firebase/app';
 import 'firebase/auth';
@@ -11,11 +21,18 @@ import 'firebase/auth';
  *
  */
 export class Auth implements OpenflameComponent {
+  public readonly authStateChanged$: Observable<User>;
+  public readonly signIn$: Observable<User>;
+  public readonly signOut$: Observable<User>;
+  public readonly isSignedIn$: Observable<boolean>;
+
   private _firebaseApp: firebase.app.App;
   private _firebaseAuth: firebase.auth.Auth;
+  private _currentUser: User;
+  private readonly initiallySingedOut$: Observable<any>;
 
   constructor(public app: Openflame) {
-    // FIXME: we should support multiple firebase.app.App here, not just [DEFAULT]
+    // FIXME: it should support multiple firebase.app.App here, not just [DEFAULT]
 
     try {
       this._firebaseApp = firebase.app();
@@ -26,17 +43,63 @@ export class Auth implements OpenflameComponent {
 
     this._firebaseAuth = firebase.auth(this._firebaseApp);
 
-    // Subscribe to auth state changes so that we can notify other Openflame components, like the database
-    this.onAuthStateChanged().subscribe((user: User) => {
-      const msg: OpenflameComponentMessage = {
-        app: this.app,
-        from: 'auth',
-        event: 'authStateChanged',
-        payload: {user}
-      };
+    // An observable that emits whenever there's an auth state change
+    this.authStateChanged$ = Observable.create((observer: Observer<User>) => this.onAuthStateChanged(observer)).share();
 
-      OpenflameComponent.message$.next(msg);
-    });
+    // this.authStateChanged$.subscribe((user: User) => {
+    //   const msg: OpenflameComponentMessage = {
+    //     app: this.app,
+    //     from: 'auth',
+    //     event: 'authStateChanged',
+    //     payload: {user}
+    //   };
+    //
+    //   OpenflameComponent.message$.next(msg);
+    // });
+
+    // Subscribe to auth state changes so that we can notify other Openflame components, like the database
+    this.authStateChanged$
+      .map<User, OpenflameComponentMessage>((user: User) => ({
+          app: this.app,
+          from: 'auth',
+          event: 'authStateChanged',
+          payload: {user}
+        })
+      )
+      .subscribe(OpenflameComponent.message$);
+
+    const [signOut$, initiallySingedOut$]: Array<Observable<User>> = this.authStateChanged$
+      .partition((auth: User) => !auth && !!this._currentUser);
+
+    this.initiallySingedOut$ = initiallySingedOut$
+      .do((auth: User) => this._currentUser = auth);
+
+    // An observable that emits when the user signs in
+    this.signIn$ = this.authStateChanged$
+      .filter((auth: User) => !!auth)
+      .do((auth: User) => this._currentUser = auth)
+      .share();
+
+    // An observable that emits when the user signs out
+    this.signOut$ = signOut$
+      .map((auth: User) => {
+        const currentAuth = this._currentUser;
+        this._currentUser = auth;
+        return currentAuth;
+      })
+      .share();
+
+    // An observable that emits whenever there's an auth state change, telling
+    // whether the user is signed in (true) or out (false). Upon subscription it
+    // immediately emits the current state ("publish behavior").
+    this.isSignedIn$ = this.initiallySingedOut$
+      .merge(this.signIn$)
+      .merge(this.signOut$)
+      .map(() => !!this._currentUser)
+      .publishBehavior<boolean>(void 0)
+      .refCount()
+      .filter((isSignedIn: boolean) => isSignedIn !== undefined)
+      .distinctUntilChanged();
   }
 
   get currentUser(): User {
@@ -71,8 +134,8 @@ export class Auth implements OpenflameComponent {
     return <Promise<any>>this._firebaseAuth.getRedirectResult();
   }
 
-  onAuthStateChanged(): Observable<User> {
-    return Observable.create((observer: Observer<User>) => this._firebaseAuth.onAuthStateChanged(observer));
+  onAuthStateChanged(nextOrObserver: Object, error?: (a: firebase.auth.Error) => any, completed?: () => any): () => any {
+    return this._firebaseAuth.onAuthStateChanged(nextOrObserver, error, completed);
   }
 
   sendPasswordResetEmail(email: string): Promise<any> {
