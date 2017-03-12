@@ -22,23 +22,23 @@ export abstract class Query {
     return new Reference(this.path, this.db);
   }
 
-  get value() {
+  get value$() {
     return this.on('value');
   }
 
-  get childAdded() {
+  get childAdded$() {
     return this.on('child_added');
   }
 
-  get childRemoved() {
+  get childRemoved$() {
     return this.on('child_removed');
   }
 
-  get childChanged() {
+  get childChanged$() {
     return this.on('child_changed');
   }
 
-  get childMoved() {
+  get childMoved$() {
     return this.on('child_moved');
   }
 
