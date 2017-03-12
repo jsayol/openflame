@@ -1,3 +1,4 @@
+import { Subject } from 'rxjs/Subject';
 import { Subscriber } from 'rxjs/Subscriber';
 import { Observable } from 'rxjs/Observable';
 import 'rxjs/add/operator/do';
@@ -7,7 +8,7 @@ import 'rxjs/add/operator/takeUntil';
 import { DatabaseInternal, EventType } from './database-internal';
 import { Path } from './path';
 import { Reference } from './reference';
-import { Subject } from 'rxjs';
+import { DataSnapshot } from './data-snapshot';
 
 export abstract class Query {
   protected queryOptions: QueryOptions = {};
@@ -125,7 +126,7 @@ export abstract class Query {
       (this.queryOptions.endAt === other.queryOptions.endAt);
   }
 
-  on(type: EventType): Observable<any> {
+  on(type: EventType): Observable<DataSnapshot> {
     if (type !== 'value') {
       throw new Error(`Reference.on: "${event}" events are not implemented yet, only "value"`);
     }
@@ -147,7 +148,7 @@ export abstract class Query {
     return on$.takeUntil(off$);
   }
 
-  once(type: EventType): Observable<any> {
+  once(type: EventType): Observable<DataSnapshot> {
     return this.on(type).first();
   }
 
