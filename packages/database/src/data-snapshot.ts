@@ -22,7 +22,7 @@ export class DataSnapshot {
   }
 
   exists(): boolean {
-    return this._model.hasChildren() || this._model.hasValue();
+    return this._model.exists();
   }
 
   exportVal(): any {
