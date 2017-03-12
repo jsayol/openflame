@@ -8,8 +8,8 @@
     "moduleResolution": "node",
     "noEmitOnError": false,
     // "noImplicitAny": true,
-    "rootDir": "./src",
-    "outDir": "./release/src",
+    "rootDir": ".",
+    "outDir": "./release",
     "declaration": true,
     "sourceMap": true,
     "inlineSources": false,
@@ -21,8 +21,8 @@
     "skipLibCheck": true,
     "importHelpers": true
   },
-  "include": [
-    "./src"
+  "files": [
+    "./src/index.ts"
   ],
   "exclude": [
     "@openflame/**/*"

@@ -4,7 +4,8 @@
   "description": "Authentication component for Openflame: An alternative, RxJS-based SDK for Firebase",
   "author": "Josep Sayol <josep.sayol@gmail.com>",
   "main": "release/bundles/auth.umd.js",
-  "module": "release/auth/src/index.js",
+  "module": "release/src/index.js",
+  "typings": "release/src/index.d.ts",
   "license": "MIT",
   "scripts": {
     "build": "npm run build:js && npm run build:umd:dev && npm run build:umd:prod",
@@ -25,15 +26,13 @@
     "tslib": "^1.6.0"
   },
   "peerDependencies": {
-    "@openflame/core": "0.0.1",
-    "rxjs": "^5.2.0"
+    "@openflame/core": "0.0.1"
   },
   "devDependencies": {
-    "@openflame/core": "*",
+    "@openflame/core": "0.0.1",
     "cpy-cli": "^1.0.1",
     "cross-env": "^3.2.3",
     "rimraf": "^2.6.1",
-    "rxjs": "^5.2.0",
     "typescript": "^2.1.6",
     "webpack": "^2.2.1"
   }

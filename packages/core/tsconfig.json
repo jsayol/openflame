@@ -22,6 +22,7 @@
     "rootDir": "..",
     "outDir": "./release/tmp",
     "declaration": true,
+//    "declarationDir": "./release/typings",
     "sourceMap": true,
     "inlineSources": false,
     "lib": [
@@ -33,9 +34,10 @@
     "skipLibCheck": true,
     "importHelpers": true
   },
-  "include": [
-    "./src",
-    "./add"
+  "files": [
+    "./src/index.ts",
+    "./add/auth.ts",
+    "./add/database.ts"
   ],
   "exclude": [
     "@openflame/core/**/*",

@@ -1,7 +1,9 @@
 const pathResolve = require('path').resolve;
+// const {CheckerPlugin} = require('awesome-typescript-loader');
 
 module.exports = {
   entry: [
+    // pathResolve(__dirname, './src/index.ts')
     pathResolve(__dirname, './release/src/index.js')
   ],
   devtool: 'source-map',
@@ -9,6 +11,17 @@ module.exports = {
     /^@openflame\/(.*)/,
     /^rxjs(\/(.*))?$/
   ],
+  // module: {
+  //   loaders: [
+  //     {
+  //       test: /\.ts$/,
+  //       loader: 'awesome-typescript-loader'
+  //     }
+  //   ]
+  // },
+  // plugins: [
+  //   new CheckerPlugin()
+  // ],
   output: {
     path: pathResolve(__dirname, './release/bundles'),
     libraryTarget: 'umd',
