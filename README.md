@@ -49,7 +49,6 @@ const openflame = new Openflame({
   messagingSenderId: "..."
 });
 
-// NOTE: `childAdded$` hasn't been implemented yet
 const newMessage$ = openflame.database.ref('/messages').childAdded$;
 
 newMessage$.subscribe((snap: DataSnapshot) => {
