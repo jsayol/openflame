@@ -9,7 +9,7 @@ export class User implements firebase.User {
    * It prevents creating a new `User` instance every time openflame.auth.currentUser is called.
    * @param firebaseUser
    * @returns {User}
-   * @private
+   * @internal
    */
   static _get(firebaseUser: firebase.User): User {
     return this._instances[firebaseUser.uid] || (this._instances[firebaseUser.uid] = new User(firebaseUser));
