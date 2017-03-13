@@ -1,7 +1,10 @@
 import { Path } from './path';
 
+/**
+ * @internal
+ */
 export class DataModel {
-  private children: { [k: string]: DataModel } = {};
+  private _children: { [k: string]: DataModel } = {};
   private value: boolean | string | number | any[] | null = null;
 
   constructor(public key: string | null = null,
@@ -11,6 +14,18 @@ export class DataModel {
     // TODO: There should be a check for circular references somewhere in here
 
     this.setData(data);
+  }
+
+  get root(): DataModel {
+    let model: DataModel = this;
+
+    while (model.parent) model = model.parent;
+
+    return model;
+  }
+
+  get children(): DataModel[] {
+    return Object.getOwnPropertyNames(this._children).map((key: string) => this._children[key]);
   }
 
   setData(data: boolean | string | number | { [k: string]: any } | any[]): DataModel {
@@ -24,7 +39,7 @@ export class DataModel {
 
       for (let key in data) {
         if (data.hasOwnProperty(key) && (data[key] !== null)) {
-          this.children[key] = new DataModel(key, this, data[key]);
+          this._children[key] = new DataModel(key, this, data[key]);
         }
       }
     }
@@ -44,22 +59,22 @@ export class DataModel {
 
     const key = <any>parts.shift();
 
-    if (typeof this.children[key] === 'undefined') {
-      this.children[key] = new DataModel(key, this);
+    if (typeof this._children[key] === 'undefined') {
+      this._children[key] = new DataModel(key, this);
     }
 
-    return this.children[key].child(new Path(parts));
+    return this._children[key].child(new Path(parts));
   }
 
   clone(): DataModel {
-    const clone = new DataModel();
-    const childKeys = Object.getOwnPropertyNames(this.children);
+    const clone = new DataModel(this.key, this.parent);
+    const childKeys = Object.getOwnPropertyNames(this._children);
 
     if (childKeys.length > 0) {
       // Let's not use forEach here to avoid eating too much memory with recursion
       for (let i = 0, l = childKeys.length; i < l; i++) {
         const key = childKeys[i];
-        clone.children[key] = this.children[key].clone();
+        clone._children[key] = this._children[key].clone();
       }
     } else {
       clone.value = this.value;
@@ -68,8 +83,8 @@ export class DataModel {
     return clone;
   }
 
-  toObject(): Object | null {
-    const childKeys = Object.getOwnPropertyNames(this.children);
+  toObject(): object | boolean | string | number | any[] | null {
+    const childKeys = Object.getOwnPropertyNames(this._children);
 
     if (childKeys.length > 0) {
       const obj = {};
@@ -77,7 +92,7 @@ export class DataModel {
       // Let's not use forEach here to avoid eating too much memory with recursion
       for (let i = 0, l = childKeys.length; i < l; i++) {
         const key = childKeys[i];
-        obj[key] = this.children[key].toObject();
+        obj[key] = this._children[key].toObject();
       }
 
       return obj;
@@ -87,7 +102,20 @@ export class DataModel {
   }
 
   exists(): boolean {
-    return this.hasChildren() || this.hasValue();
+    if (this.hasValue())
+      return true;
+
+    if (this.hasChildren()) {
+      return Object.getOwnPropertyNames(this._children).some((key: string) => this._children[key].exists());
+    }
+
+    return false;
+    // return this.hasValue() || (this.hasChildren() && this._children);
+  }
+
+  hasChild(key: string): boolean {
+    const child = this._children[key];
+    return child && child.exists();
   }
 
   hasChildren(): boolean {
@@ -99,7 +127,7 @@ export class DataModel {
   }
 
   numChildren(): number {
-    return Object.getOwnPropertyNames(this.children).length;
+    return Object.getOwnPropertyNames(this._children).length;
   }
 
 

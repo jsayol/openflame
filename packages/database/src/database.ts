@@ -1,7 +1,6 @@
 import { Openflame, OpenflameComponent, OpenflameComponentMessage } from '@openflame/core';
 import { Reference } from './reference';
 import { DatabaseInternal } from './database-internal';
-import { Observable } from 'rxjs/Observable';
 import 'rxjs/add/operator/filter';
 
 /**
@@ -14,7 +13,7 @@ export class Database implements OpenflameComponent {
     this.db = new DatabaseInternal(app.config.databaseURL);
 
     // Subscribe to messages from other components
-    (<Observable<OpenflameComponentMessage>><any>OpenflameComponent.message$.asObservable())
+    OpenflameComponent.message$
       .filter((msg: OpenflameComponentMessage) => (msg.app === this.app) && (!msg.to || (msg.to === 'database')))
       .subscribe((msg: OpenflameComponentMessage) => this.processComponentMessage(msg));
   }

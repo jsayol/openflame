@@ -30,7 +30,7 @@ const SDK_VERSION = 'sdk.js.3-7-0';
 const KEEPALIVE_PERIOD = 45000;
 
 /**
- * @private
+ * @internal
  * Internal implementation of the database SDK
  */
 export class DatabaseInternal {
@@ -53,11 +53,22 @@ export class DatabaseInternal {
   private _notifier = new Subject<NotifierEvent>();
   private _hasReceivedError = false;
 
+  // FIXME: this class does way too many things. Split it up in logical parts.
+
   constructor(_databaseURL?: string) {
     if (!_databaseURL)
       throw new Error('No databaseURL provided in the configuration');
 
     this._databaseURL = _databaseURL;
+
+    // TODO: remove this, it's just for debugging
+    // this._notifier.subscribe((event: NotifierEvent) => {
+    //   console.log(`${event.type}(${event.path}):`, event.model);
+    //
+    //   if ((event.type === 'value') && ! event.path.parent) {
+    //     console.log('-----------------------------');
+    //   }
+    // });
 
     this.init();
     this.connect();
@@ -118,11 +129,12 @@ export class DatabaseInternal {
     // This observable emits when we receive data from the server
     const notifier$ = this._notifier
       .filter((event: NotifierEvent): boolean => {
-        // TODO: take query options into account, not just the path
-        return query.path.includesOrEqualTo(event.path);
+        // TODO: take query options into account
+        return (event.type === type) && query.path.isEqual(event.path) && (!event.tag || (event.tag === newListener.tag));
       })
-      .map((/*event: NotifierEvent*/): DataSnapshot => {
-        return new DataSnapshot(query, this._model.child(query.path).clone());
+      .map((event: NotifierEvent): DataSnapshot => {
+        return new DataSnapshot(query, event.model);
+        // return new DataSnapshot(query, this._model.child(query.path).clone());
       })
       .share();
 
@@ -241,6 +253,76 @@ export class DatabaseInternal {
     return this._serverInfo.timeDiff;
   }
 
+  private init() {
+    const dbURLmatch = this._databaseURL.trim().match(/^http(s?):\/\/(([^\.]+)\.(.+))$/);
+
+    if (!dbURLmatch) {
+      throw new Error('Missing or malformed databaseURL in config');
+    }
+
+    this._useTLS = dbURLmatch[1] === 's';
+    this._projectName = dbURLmatch[3];
+
+    const savedHost = localStorage.getItem(`firebase:host:${dbURLmatch[2]}`);
+
+    if (savedHost) {
+      this._host = JSON.parse(savedHost);
+      this._useProjectName = true;
+    } else {
+      this._host = dbURLmatch[2];
+    }
+  }
+
+  private connect() {
+    let url = `ws${this._useTLS ? 's' : ''}://${this._host}/.ws?v=5` + (this._useProjectName ? `&ns=${this._projectName}` : '');
+
+    this._socket$ = Observable.webSocket<any>(url);
+
+    this._connection = this._socket$.subscribe(
+      (msg: object) => this.processMessage(msg),
+      (err: any) => console.error('WebSocket error:', err),
+      () => console.info('WebSocket closed')
+    );
+
+    this.scheduleKeepAlive();
+  }
+
+  private disconnect() {
+    // RxJS magic!
+    !this._connection.closed && this._connection.unsubscribe();
+  }
+
+  private handleReset(host) {
+    this.disconnect();
+
+    if (this._host === host) {
+      console.warn('The Firebase server is requesting a reconnect to the current host. Aborting.');
+      return;
+    }
+
+    const currentHost = this._host;
+
+    this._host = host;
+    this._useProjectName = true;
+
+    localStorage.setItem(`firebase:host:${currentHost}`, JSON.stringify(host));
+
+    setTimeout(() => this.connect(), 1000);
+  }
+
+  private scheduleKeepAlive() {
+    // Clear the keep-alive timeout, if any
+    this._keepAliveHandler && clearTimeout(this._keepAliveHandler);
+
+    // Schedule a keep-alive message
+    this._keepAliveHandler = setTimeout(() => this.send(0), KEEPALIVE_PERIOD);
+  }
+
+  private send(data) {
+    this._socket$.next(JSON.stringify(data));
+    this.scheduleKeepAlive();
+  }
+
   private resendDataMessage(req: SentDataRequest) {
     const id = this._reqCounter++;
     req.data['r'] = id;
@@ -309,77 +391,7 @@ export class DatabaseInternal {
     this.sendDataMessage('n', null, payload);
   }
 
-  private init() {
-    const dbURLmatch = this._databaseURL.trim().match(/^http(s?):\/\/(([^\.]+)\.(.+))$/);
-
-    if (!dbURLmatch) {
-      throw new Error('Missing or malformed databaseURL in config');
-    }
-
-    this._useTLS = dbURLmatch[1] === 's';
-    this._projectName = dbURLmatch[3];
-
-    const savedHost = localStorage.getItem(`firebase:host:${dbURLmatch[2]}`);
-
-    if (savedHost) {
-      this._host = JSON.parse(savedHost);
-      this._useProjectName = true;
-    } else {
-      this._host = dbURLmatch[2];
-    }
-  }
-
-  private connect() {
-    let url = `ws${this._useTLS ? 's' : ''}://${this._host}/.ws?v=5` + (this._useProjectName ? `&ns=${this._projectName}` : '');
-
-    this._socket$ = Observable.webSocket<any>(url);
-
-    this._connection = this._socket$.subscribe(
-      (msg: Object) => this.processMessage(msg),
-      (err: any) => console.error('WebSocket error:', err),
-      () => console.info('WebSocket closed')
-    );
-
-    this.scheduleKeepAlive();
-  }
-
-  private disconnect() {
-    // RxJS magic!
-    !this._connection.closed && this._connection.unsubscribe();
-  }
-
-  private handleReset(host) {
-    this.disconnect();
-
-    if (this._host === host) {
-      console.warn('The Firebase server is requesting a reconnect to the current host. Aborting.');
-      return;
-    }
-
-    const currentHost = this._host;
-
-    this._host = host;
-    this._useProjectName = true;
-
-    localStorage.setItem(`firebase:host:${currentHost}`, JSON.stringify(host));
-
-    setTimeout(() => this.connect(), 1000);
-  }
-
-  private scheduleKeepAlive() {
-    // Clear the keep-alive timeout, if any
-    this._keepAliveHandler && clearTimeout(this._keepAliveHandler);
-
-    // Schedule a keep-alive message
-    this._keepAliveHandler = setTimeout(() => this.send(0), KEEPALIVE_PERIOD);
-  }
-
-  private send(data) {
-    this._socket$.next(JSON.stringify(data));
-    this.scheduleKeepAlive();
-  }
-
-  private processMessage(msg: Object) {
+  private processMessage(msg: object) {
     // console.log(JSON.stringify(msg, null, 2));
 
     switch (msg['t']) {
@@ -394,8 +406,8 @@ export class DatabaseInternal {
     }
   }
 
-  private processConnectionMessage(msg: Object) {
-    const data: Object = msg['d'];
+  private processConnectionMessage(msg: object) {
+    const data: object = msg['d'];
 
     switch (data['t']) {
 
@@ -445,70 +457,69 @@ export class DatabaseInternal {
     }
   }
 
-  private processDataMessage(msg: Object) {
-    const data: Object = msg['d'];
+  private processDataMessage(msg: { [k: string]: any }) {
+    const data: { [k: string]: any } = msg.d;
 
-    if (data['r']) {
-      const reqNumber: number = data['r'];
-      const response: Object = data['b'];
-
-      // Check if there's any older request awaiting response
-      const hadPending = this.checkPendingRequests(reqNumber);
-
-      if (!hadPending && this._hasReceivedError) {
-        this._hasReceivedError = false;
-      }
-
-      if (this._sentRequests[reqNumber]) {
-        const request = this._sentRequests[reqNumber];
-        const status: string = response['s'];
-
-        if (status === 'ok') {
-          const responseData: Object = response['d'];
-
-          // console.info(`Response(r=${reqNumber}):`, responseData);
-          request.resolve(response['d']);
-
-          if (responseData['w']) {
-            // The server is returning one or more warnings
-            const warnings = <Array<string>> responseData['w'];
-            this.processDataMessageWarnings(reqNumber, warnings);
-          }
-
-        } else {
-          // console.error(`Response(r=${reqNumber}) error:`, msg);
-          const path = request.query ? ' at ' + request.query.path.toString() : '';
-
-          // TODO: should we do something with these errors, other than reject the request?
-          request.reject(new Error(`${status}${path}: ${response['d']}`));
-        }
-
-        delete this._sentRequests[reqNumber];
-      }
-
-    } else if (data['a']) {
-      switch (data['a']) {
-
+    if (data.r) {
+      this.processDataResponse(data);
+    } else if (data.a) {
+      switch (data.a) {
         case 'd':
           // New data for a specific key ("set" operation)
-          this.processData(data['b']);
+          this.processData(data.b);
           break;
-
         case 'm':
           // Multipath update
-          // this.processMultipathData(data['b']);
+          this.processMultipathData(data.b);
           break;
-
         case 'ac':
           // Authentication?
-          console.log('Auth message received:', data['b']);
+          console.log('Auth message received:', data.b);
           break;
-
         default:
           console.info('Unknown data message (a):', msg);
       }
+    } else {
+      console.info('Wuuuut? Unknown data message:', msg);
     }
 
+  }
+
+  private processDataResponse(data: { [k: string]: any }) {
+    const reqNumber: number = data.r;
+    const response: { [k: string]: any } = data.b;
+
+    // Check if there's any older request awaiting response and resend them
+    const hadPending = this.checkPendingRequests(reqNumber);
+
+    if (!hadPending && this._hasReceivedError) {
+      this._hasReceivedError = false;
+    }
+
+    if (this._sentRequests[reqNumber]) {
+      const request = this._sentRequests[reqNumber];
+      const status: string = response.s;
+
+      if (status === 'ok') {
+        const responseData: { [k: string]: any } = response.d;
+
+        request.resolve(responseData);
+
+        if (responseData.w) {
+          // The server is returning one or more warnings
+          const warnings = <Array<string>> responseData.w;
+          this.processDataMessageWarnings(reqNumber, warnings);
+        }
+
+      } else {
+        const path = request.query ? ' at ' + request.query.path.toString() : '';
+
+        // TODO: should we do something with these errors, other than reject the request?
+        request.reject(new Error(`${status}${path}: ${response.d}`));
+      }
+
+      delete this._sentRequests[reqNumber];
+    }
   }
 
   /**
@@ -602,20 +613,30 @@ export class DatabaseInternal {
     }
   }
 
-  private processData(data: any) {
+  private processData(data: { [k: string]: any }) {
+    // TODO: sanity check on the data? It comes from the server, but still.
+
     // The path for the data we're recieving
-    const path = new Path(data['p']);
+    const path = new Path(data.p);
 
     // The value of the new data
-    const value: any = data['d'];
+    const value: any = data.d;
 
     // Query "tag"
-    // const tag: number = data['t'];
+    const tag: number = data.t;
 
-    this._model.child(path).setData(value);
+    this.updateModel(path, value, tag);
+  }
 
+  private processMultipathData(data: { [k: string]: any }) {
+    // TODO: sanity check on the data? It comes from the server, but still.
+    Object.getOwnPropertyNames(data.d).forEach((key: string) => {
+      this.updateModel(new Path(data.p).child(key), data.d[key], data.t);
+    });
+  }
+
+  private updateModel(path: Path, value: any, tag: number = 0, oldModel?: DataModel) {
     /*
-     TODO: Actually implement approach 1
      TODO: Figure out which approach is best:
      1. Current, naive approach: emit every single possible event and let the listeners' notifiers filter them out.
      2. Queue the events and later loop through all the listeners to figure out which ones we need to emit
@@ -623,10 +644,92 @@ export class DatabaseInternal {
      The current one is more flexible, but it might not offer very good performance with large updates and lots of listeners.
      I should probably do some complexity calculations to figure it out, and some perf benchmarking wouldn't hurt.
      */
-    this._notifier.next({
-      path,
-      data: value
-    });
+
+    // TODO: take query (tag) into account. It might affect child added/removed
+
+    let bubbleUp = false;
+    let newModel: DataModel;
+
+    if (!oldModel) {
+      // Keep the current state of the model at this path
+      oldModel = this._model.child(path);
+
+      // Clone and update the model
+      this._model = this._model.clone();
+      newModel = this._model.child(path).setData(value);
+
+      // Set the flag to bubble up the event
+      bubbleUp = true;
+    } else {
+      newModel = this._model.child(path);
+    }
+
+    let isObject: boolean;
+
+    if (value === null) {
+      isObject = false;
+    }
+    else if (typeof value === 'object') {
+      isObject = true;
+      Object.getOwnPropertyNames(value).forEach((key: string) => {
+        const childPath = path.child(key);
+        this.updateModel(childPath, value[key], tag, oldModel.child(childPath));
+      });
+    } else {
+      isObject = false;
+    }
+
+    // TODO: detect and trigger "child_moved" events
+
+    // Check for child added, removed, changed
+    if (oldModel.exists()) {
+      if (!isObject) {
+        if (value === null) {
+          // Trigger "child_removed" on the parent for this node
+          if (path.parent)
+            this._notifier.next({type: 'child_removed', path: path.parent, model: oldModel, tag});
+
+          // Trigger value and child_removed for any descendants
+          this.triggerNodeRemoved(path, oldModel, tag, false);
+        } else {
+          if (path.parent)
+            this._notifier.next({type: 'child_changed', path: path.parent, model: newModel, tag});
+        }
+      }
+    } else {
+      if (path.parent)
+        this._notifier.next({type: 'child_added', path: path.parent, model: newModel, tag});
+    }
+
+    this._notifier.next({type: 'value', path: path, model: newModel, tag});
+
+    if (bubbleUp) {
+      let bubbleUpModel = newModel;
+      let bubbleUpPath = path;
+
+      while (bubbleUpModel.parent) {
+        this._notifier.next({type: 'value', path: bubbleUpPath.parent, model: bubbleUpModel.parent, tag});
+        bubbleUpModel = bubbleUpModel.parent;
+        bubbleUpPath = bubbleUpPath.parent;
+      }
+    }
+  }
+
+  private triggerNodeRemoved(path: Path, model: DataModel, tag?: number, valueEvent = true) {
+    if (model.hasChildren()) {
+      model.children.forEach((child: DataModel) => {
+        // Recursively process any children
+        this.triggerNodeRemoved(path.child(child.key), child, tag);
+
+        // trigger a "child_removed" event on the path (parent) for this child
+        this._notifier.next({type: 'child_removed', path: path, model: child, tag});
+      });
+
+      if (valueEvent) {
+        // Trigger a "value" evnet for this node
+        this._notifier.next({type: 'value', path: path, model, tag});
+      }
+    }
   }
 
   private processDataMessageWarnings(reqNumber: number, warnings: string[]) {
@@ -644,6 +747,7 @@ export class DatabaseInternal {
   }
 
 }
+
 
 /**
  *
@@ -669,8 +773,10 @@ export type EventType =
  *
  */
 export interface NotifierEvent {
+  type: EventType;
   path: Path;
-  data: any;
+  model: DataModel;
+  tag?: number; // Query tag
 }
 
 /**

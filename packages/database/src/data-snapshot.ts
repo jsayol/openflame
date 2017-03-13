@@ -53,7 +53,7 @@ export class DataSnapshot {
     return JSON.stringify(this.val());
   }
 
-  val(): Object | null {
+  val(): object | boolean | string | number | any[] | null {
     return this._model.toObject();
   }
 

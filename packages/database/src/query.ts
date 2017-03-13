@@ -127,8 +127,8 @@ export abstract class Query {
   }
 
   on(type: EventType): Observable<DataSnapshot> {
-    if (type !== 'value') {
-      throw new Error(`Reference.on: "${event}" events are not implemented yet, only "value"`);
+    if (type === 'child_moved') {
+      throw new Error(`Reference.on: "child_moved" events are not implemented yet, sorry!`);
     }
 
     const on$ = new Observable((subscriber: Subscriber<any>) => {
@@ -166,11 +166,11 @@ export abstract class Query {
   }
 
   /**
-   * @private
+   * @internal
    * @returns {Object}
    */
-  toObject(): Object | null {
-    const q: Object = {};
+  toObject(): object | null {
+    const q: object = {};
     let hasQuery = false;
 
     if (this.queryOptions.limitFrom) {
