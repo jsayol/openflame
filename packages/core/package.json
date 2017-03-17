@@ -1,6 +1,6 @@
 {
   "name": "@openflame/core",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Core component for Openflame: An alternative, RxJS-based SDK for Firebase",
   "author": "Josep Sayol <josep.sayol@gmail.com>",
   "main": "release/bundles/core.umd.js",
