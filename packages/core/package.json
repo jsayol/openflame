@@ -3,10 +3,22 @@
   "version": "0.0.3",
   "description": "Core component for Openflame: An alternative, RxJS-based SDK for Firebase",
   "author": "Josep Sayol <josep.sayol@gmail.com>",
-  "main": "./bundles/core.umd.js",
-  "module": "./src/index.js",
-  "typings": "./src/index.d.ts",
+  "main": "release/bundles/core.umd.js",
+  "module": "release/src/index.js",
+  "typings": "release/src/index.d.ts",
   "license": "MIT",
+  "scripts": {
+    "build": "npm run build:js && npm run build:umd",
+    "build:js": "tsc -p tsconfig.json && npm run build:js:post",
+    "build:js:post": "cpr ./release/tmp/core ./release && rimraf ./release/tmp",
+    "build:umd": "npm run build:umd:dev && npm run build:umd:prod",
+    "build:umd:dev": "cross-env NODE_ENV=dev webpack",
+    "build:umd:prod": "cross-env NODE_ENV=production webpack -p",
+    "clean": "rimraf release",
+    "release": "cpy README.md ../../LICENSE ./release && node ../../utils/copy-package-json.js core",
+    "prebuild": "npm run clean",
+    "postbuild": "npm run release"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/jsayol/openflame.git"
@@ -14,5 +26,13 @@
   "peerDependencies": {},
   "dependencies": {
     "tslib": "^1.6.0"
+  },
+  "devDependencies": {
+    "cpr": "^2.0.2",
+    "cpy-cli": "^1.0.1",
+    "cross-env": "^3.2.3",
+    "rimraf": "^2.6.1",
+    "typescript": "^2.1.6",
+    "webpack": "^2.2.1"
   }
 }
