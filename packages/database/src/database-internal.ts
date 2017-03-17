@@ -341,9 +341,11 @@ export class DatabaseInternal {
   }
 
   private addServerWatch(query: Query, tag: number): Promise<any> {
+    const path = query.path;
+
     const payload = {
       /* The path (duh) */
-      p: query.path.toString(),
+      p: path.toString(),
 
       /*
        This seems to be some sort of base64-encoded hash.
@@ -355,7 +357,7 @@ export class DatabaseInternal {
        returns the data even if it hasn't changed. Strange...
        EDIT 2: it's a bug on the web SDK. It's sending the wrong hash if the listener has a query.
        */
-      h: ''
+      h: this._model.child(path).hash
     };
 
     if (tag) {
@@ -665,6 +667,16 @@ export class DatabaseInternal {
     }
 
     let isObject: boolean;
+
+    if ((typeof value === 'object') && (typeof value['.value'] !== 'undefined')) {
+      /*
+      If a priority has been set at a certain path, its format isn't {"some key": "some value"}
+      but instead it's {"some key": {".priority": "some priority", ".value": "some value"} }
+      For now we ignore the priority.
+      TODO: handle priorities... maybe?
+       */
+      value = value['.value'];
+    }
 
     if (value === null) {
       isObject = false;

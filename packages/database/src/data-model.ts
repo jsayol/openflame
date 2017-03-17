@@ -1,4 +1,6 @@
 import { Path } from './path';
+import { toIEEE754Hex } from './utils/number';
+import { base64Sha1 } from './utils/base64';
 
 /**
  * @internal
@@ -6,6 +8,7 @@ import { Path } from './path';
 export class DataModel {
   private _children: { [k: string]: DataModel } = {};
   private value: boolean | string | number | any[] | null = null;
+  private _hash: string | null = null;
 
   constructor(public key: string | null = null,
               public parent: DataModel | null = null,
@@ -71,7 +74,6 @@ export class DataModel {
     const childKeys = Object.getOwnPropertyNames(this._children);
 
     if (childKeys.length > 0) {
-      // Let's not use forEach here to avoid eating too much memory with recursion
       for (let i = 0, l = childKeys.length; i < l; i++) {
         const key = childKeys[i];
         clone._children[key] = this._children[key].clone();
@@ -89,7 +91,6 @@ export class DataModel {
     if (childKeys.length > 0) {
       const obj = {};
 
-      // Let's not use forEach here to avoid eating too much memory with recursion
       for (let i = 0, l = childKeys.length; i < l; i++) {
         const key = childKeys[i];
         obj[key] = this._children[key].toObject();
@@ -128,6 +129,35 @@ export class DataModel {
 
   numChildren(): number {
     return Object.getOwnPropertyNames(this._children).length;
+  }
+
+  get hash(): string {
+    if (!this._hash) {
+      this._hash = this.hasChildren() ? this._getObjectHash() : this._getValueHash();
+    }
+
+    return this._hash;
+  }
+
+  private _getValueHash(): string {
+    const valueType = typeof this.value;
+    const str = valueType + ':' + ((valueType === 'number') ? toIEEE754Hex(<number>this.value) : this.value);
+    return base64Sha1(str);
+  }
+
+  private _getObjectHash(): string {
+    let str = '';
+    const childKeys = Object.getOwnPropertyNames(this._children).sort();
+
+    for (let i = 0, l = childKeys.length; i < l; i++) {
+      const key = childKeys[i];
+      const hash = this._children[key].hash;
+      if (hash !== '') {
+        str += `:${key}:${hash}`;
+      }
+    }
+
+    return str !== '' ? base64Sha1(str) : '';
   }
 
 
