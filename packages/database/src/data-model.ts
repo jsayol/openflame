@@ -32,6 +32,17 @@ export class DataModel {
   }
 
   setData(data: boolean | string | number | { [k: string]: any } | any[]): DataModel {
+    // TODO: transform Firebase array-like objects to actual arrays: {"0":"abc", "1":"def"} to ["abc", "def"]
+
+    if (data && (typeof data['.value'] !== 'undefined')) {
+      /*
+       If a priority has been set at a certain path, its format isn't {"some key": "some value"}
+       but instead it's {"some key": {".priority": "some priority", ".value": "some value"} }
+       For now we ignore the priority.
+       TODO: handle priorities... maybe?
+       */
+      data = data['.value'];
+    }
 
     if (data === null) {
       this._value = null;
@@ -103,15 +114,15 @@ export class DataModel {
   }
 
   exists(): boolean {
-    if (this.hasValue())
+    if (this.hasValue()) {
       return true;
+    }
 
     if (this.hasChildren()) {
       return Object.getOwnPropertyNames(this._children).some((key: string) => this._children[key].exists());
     }
 
     return false;
-    // return this.hasValue() || (this.hasChildren() && this._children);
   }
 
   hasChild(key: string): boolean {
@@ -129,6 +140,14 @@ export class DataModel {
 
   numChildren(): number {
     return Object.getOwnPropertyNames(this._children).length;
+  }
+
+  forEachChild(fn: (key: string, child: DataModel) => any) {
+    const childKeys = Object.getOwnPropertyNames(this._children).sort();
+
+    for (let i = 0, l = childKeys.length; i < l; i++) {
+      fn(childKeys[i], this._children[childKeys[i]]);
+    }
   }
 
   get hash(): string {
@@ -151,15 +170,13 @@ export class DataModel {
 
   private _getObjectHash(): string {
     let str = '';
-    const childKeys = Object.getOwnPropertyNames(this._children).sort();
 
-    for (let i = 0, l = childKeys.length; i < l; i++) {
-      const key = childKeys[i];
-      const hash = this._children[key].hash;
+    this.forEachChild((key: string, child: DataModel) => {
+      const hash = child.hash;
       if (hash !== '') {
         str += `:${key}:${hash}`;
       }
-    }
+    });
 
     return str !== '' ? base64Sha1(str) : '';
   }

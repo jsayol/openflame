@@ -3,18 +3,20 @@ import { Observable } from 'rxjs/Observable';
 import { Subscription } from 'rxjs/Subscription';
 import { WebSocketSubject } from 'rxjs/observable/dom/WebSocketSubject';
 import 'rxjs/add/operator/map';
-import 'rxjs/add/operator/mapTo';
 import 'rxjs/add/operator/merge';
 import 'rxjs/add/operator/share';
-import 'rxjs/add/operator/filter';
+import 'rxjs/add/operator/takeUntil';
+import 'rxjs/add/operator/observeOn';
 import 'rxjs/add/observable/of';
-import 'rxjs/add/observable/fromPromise';
+import 'rxjs/add/observable/from';
 import 'rxjs/add/observable/dom/webSocket';
+import { async as asyncScheduler } from "rxjs/scheduler/async";
 
 import { Query } from './query';
 import { Path } from './path';
 import { DataModel } from './data-model';
 import { DataSnapshot } from './data-snapshot';
+import { Notifier, NotifierEvent } from "./notifier";
 
 
 /**
@@ -50,8 +52,8 @@ export class DatabaseInternal {
   private _tagCounter: number = 1;
   private _model: DataModel = new DataModel();
   private _dataListeners: Array<DataListener> = [];
-  private _notifier = new Subject<NotifierEvent>();
   private _hasReceivedError = false;
+  private _notifier = new Notifier();
 
   // FIXME: this class does way too many things. Split it up in logical parts.
 
@@ -60,15 +62,6 @@ export class DatabaseInternal {
       throw new Error('No databaseURL provided in the configuration');
 
     this._databaseURL = _databaseURL;
-
-    // TODO: remove this, it's just for debugging
-    // this._notifier.subscribe((event: NotifierEvent) => {
-    //   console.log(`${event.type}(${event.path}):`, event.model);
-    //
-    //   if ((event.type === 'value') && ! event.path.parent) {
-    //     console.log('-----------------------------');
-    //   }
-    // });
 
     this.init();
     this.connect();
@@ -80,7 +73,7 @@ export class DatabaseInternal {
    * @param type
    * @returns {[DataListener,Observable<DataSnapshot>]}
    */
-  addListener(query: Query, type: EventType): [DataListener, Observable<DataSnapshot>] {
+  addListener(query: Query, type: EventType): { listener: DataListener, notifier$: Observable<DataSnapshot> } {
     const toInactivate: any[] = [];
     let makeActive = true;
 
@@ -126,38 +119,43 @@ export class DatabaseInternal {
 
     this._dataListeners.push(newListener);
 
-    // This observable emits when we receive data from the server
-    const notifier$ = this._notifier
-      .filter((event: NotifierEvent): boolean => {
-        // TODO: take query options into account
-        return (event.type === type) && query.path.isEqual(event.path) && (!event.tag || (event.tag === newListener.tag));
-      })
-      .map((event: NotifierEvent): DataSnapshot => {
-        return new DataSnapshot(query, event.model);
-        // return new DataSnapshot(query, this._model.child(query.path).clone());
-      })
-      .share();
+    // A subject where we will emit the current cached value, when necessary
+    const current$ = new Subject<NotifierEvent>();
 
-    // This observable emits when the watch has been added, or immediately if we're not
-    // adding a watch, unless the notifier$ has already emited values
-    const addWatch$ = (
-      makeActive
-        ? Observable.fromPromise(this.addServerWatch(query, newListener.tag))
-        : Observable.of(void 0))
-      .takeUntil(notifier$)
-      .map(() => new DataSnapshot(query, this._model.child(query.path).clone()));
+    // This observable emits when we receive data from the server, or the current cached value when necessary
+    const notifier$ = this._notifier.forListener(newListener, current$);
+
+    const addWatchPromise = makeActive ? this.addServerWatch(query, newListener.tag) : null;
 
     // Inactivate any listeners marked for inactivation
-    // IMPORTANT: This needs to come *after* the server watch has been added. Don't move it!
+    // IMPORTANT: This needs to come *after* calling addServerWatch()
     toInactivate.forEach((listener: DataListener) => {
       listener.isActive = false;
       this.removeServerWatch(listener.query, listener.tag);
     });
 
-    return [
-      newListener,
-      notifier$.merge(addWatch$)
-    ];
+    // This observable emits when the watch has been added (unless we've already received data),
+    // or immediately if we're not adding a watch
+    const addWatch$: Observable<any> = addWatchPromise
+      ? Observable.from(addWatchPromise).takeUntil(notifier$)
+      : Observable.of(void 0);
+
+    // If we're not adding a watch, or adding the watched resolves without any data, we need to trigger
+    // this listener's notifier with the data we currently have for "value" and "child_added" events.
+    // We use the async scheduler to ensure subscription happens after exiting addListener()
+    if ((type === 'value') || (type === 'child_added')) {
+      addWatch$.observeOn(asyncScheduler).subscribe(() => {
+        const downLevels = type === 'value' ? 0 : 1;
+        const newModel = this._model.child(query.path);
+        const oldModel = new DataModel(newModel.key, newModel.parent);
+        this._notifier.trigger(query.path, oldModel, newModel, newListener.tag, false, downLevels, current$);
+      });
+    }
+
+    return {
+      listener: newListener,
+      notifier$
+    };
   }
 
   isListenerMaskedByAnyOther(listener: DataListener) {
@@ -172,8 +170,6 @@ export class DatabaseInternal {
     let shouldRemoveWatch = listenerToRemove.isActive;
 
     const newListenersList: DataListener[] = [];
-
-    console.info('removeListener, listeners =', this._dataListeners);
 
     // Let's check if we need to remove the watch or re-activate any listener
     this._dataListeners.forEach((listener: DataListener) => {
@@ -218,6 +214,7 @@ export class DatabaseInternal {
   sendDataMessage(type: string, query: Query | null, payload: any): Promise<any> {
     return new Promise((resolve, reject) => {
       if (!this._ready) {
+        // If the connection to the database is not ready yet, just queue the message for later
         this._dataMessageQueue.push({
           resolve,
           reject,
@@ -225,6 +222,7 @@ export class DatabaseInternal {
           query,
           payload,
         });
+
         return;
       }
 
@@ -251,6 +249,14 @@ export class DatabaseInternal {
 
   get timeDiff(): number {
     return this._serverInfo.timeDiff;
+  }
+
+  get model() {
+    return this._model;
+  }
+
+  get notifier() {
+    return this._notifier;
   }
 
   private init() {
@@ -637,7 +643,7 @@ export class DatabaseInternal {
     });
   }
 
-  private updateModel(path: Path, value: any, tag: number = 0, oldModel?: DataModel) {
+  private updateModel(path: Path, value: any, tag: number = 0) {
     /*
      TODO: Figure out which approach is best:
      1. Current, naive approach: emit every single possible event and let the listeners' notifiers filter them out.
@@ -649,98 +655,17 @@ export class DatabaseInternal {
 
     // TODO: take query (tag) into account. It might affect child added/removed
 
-    let bubbleUp = false;
-    let newModel: DataModel;
+    // Keep the current state of the model at this path
+    const oldModel = this._model.child(path);
 
-    if (!oldModel) {
-      // Keep the current state of the model at this path
-      oldModel = this._model.child(path);
+    // Clone the whole model and set it as the current one
+    this._model = this._model.clone();
 
-      // Clone and update the model
-      this._model = this._model.clone();
-      newModel = this._model.child(path).setData(value);
+    // Update the model with the new data
+    const newModel = this._model.child(path).setData(value);
 
-      // Set the flag to bubble up the event
-      bubbleUp = true;
-    } else {
-      newModel = this._model.child(path);
-    }
-
-    if (value && (typeof value['.value'] !== 'undefined')) {
-      /*
-      If a priority has been set at a certain path, its format isn't {"some key": "some value"}
-      but instead it's {"some key": {".priority": "some priority", ".value": "some value"} }
-      For now we ignore the priority.
-      TODO: handle priorities... maybe?
-       */
-      value = value['.value'];
-    }
-
-    let isObject: boolean;
-
-    if (value === null) {
-      isObject = false;
-    } else if (typeof value === 'object') {
-      isObject = true;
-      Object.getOwnPropertyNames(value).forEach((key: string) => {
-        const childPath = path.child(key);
-        this.updateModel(childPath, value[key], tag, oldModel.child(childPath));
-      });
-    } else {
-      isObject = false;
-    }
-
-    // TODO: detect and trigger "child_moved" events
-
-    // Check for child added, removed, changed
-    if (oldModel.exists()) {
-      if (!isObject) {
-        if (value === null) {
-          // Trigger "child_removed" on the parent for this node
-          if (path.parent)
-            this._notifier.next({type: 'child_removed', path: path.parent, model: oldModel, tag});
-
-          // Trigger value and child_removed for any descendants
-          this.triggerNodeRemoved(path, oldModel, tag, false);
-        } else {
-          if (path.parent)
-            this._notifier.next({type: 'child_changed', path: path.parent, model: newModel, tag});
-        }
-      }
-    } else {
-      if (path.parent)
-        this._notifier.next({type: 'child_added', path: path.parent, model: newModel, tag});
-    }
-
-    this._notifier.next({type: 'value', path: path, model: newModel, tag});
-
-    if (bubbleUp) {
-      let bubbleUpModel = newModel;
-      let bubbleUpPath = path;
-
-      while (bubbleUpModel.parent) {
-        this._notifier.next({type: 'value', path: bubbleUpPath.parent, model: bubbleUpModel.parent, tag});
-        bubbleUpModel = bubbleUpModel.parent;
-        bubbleUpPath = bubbleUpPath.parent;
-      }
-    }
-  }
-
-  private triggerNodeRemoved(path: Path, model: DataModel, tag?: number, valueEvent = true) {
-    if (model.hasChildren()) {
-      model.children.forEach((child: DataModel) => {
-        // Recursively process any children
-        this.triggerNodeRemoved(path.child(child.key), child, tag);
-
-        // trigger a "child_removed" event on the path (parent) for this child
-        this._notifier.next({type: 'child_removed', path: path, model: child, tag});
-      });
-
-      if (valueEvent) {
-        // Trigger a "value" evnet for this node
-        this._notifier.next({type: 'value', path: path, model, tag});
-      }
-    }
+    // Trigger notication events for the listeners
+    this._notifier.trigger(path, oldModel, newModel, tag, true);
   }
 
   private processDataMessageWarnings(reqNumber: number, warnings: string[]) {
@@ -780,15 +705,6 @@ export type EventType =
   | 'child_moved'
   | 'child_changed';
 
-/**
- *
- */
-export interface NotifierEvent {
-  type: EventType;
-  path: Path;
-  model: DataModel;
-  tag?: number; // Query tag
-}
 
 /**
  *

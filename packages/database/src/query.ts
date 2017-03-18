@@ -1,5 +1,5 @@
 import { Subject } from 'rxjs/Subject';
-import { Subscriber } from 'rxjs/Subscriber';
+import { Observer } from 'rxjs/Observer';
 import { Observable } from 'rxjs/Observable';
 import 'rxjs/add/operator/do';
 import 'rxjs/add/operator/first';
@@ -131,12 +131,11 @@ export abstract class Query {
       throw new Error(`Reference.on: "child_moved" events are not implemented yet, sorry!`);
     }
 
-    const on$ = new Observable((subscriber: Subscriber<any>) => {
-      const [listener, notifier$] = this.db.addListener(this, type);
-      const subscription = notifier$.subscribe(subscriber);
+    const on$ = Observable.create((observer: Observer<DataSnapshot>) => {
+      const {listener, notifier$} = this.db.addListener(this, type);
+      const subscription = notifier$.subscribe(observer);
 
       return () => {
-        console.log(`Tearing down "${type}" for`, this);
         this.db.removeListener(listener);
         subscription.unsubscribe();
       }

@@ -72,6 +72,7 @@ export class Reference extends Query {
   set(value: any): Promise<void> {
     // TODO: trigger locally if there are any listeners for this path
     // TODO: if `value` is an object, check its keys for invalid paths
+    // TODO: transform arrays to Firebase array-like objects: ["abc", "def"] to {"0":"abc", "1":"def"}
 
     return this.db
       .sendDataMessage('p', this, {
