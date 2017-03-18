@@ -666,9 +666,7 @@ export class DatabaseInternal {
       newModel = this._model.child(path);
     }
 
-    let isObject: boolean;
-
-    if ((typeof value === 'object') && (typeof value['.value'] !== 'undefined')) {
+    if (value && (typeof value['.value'] !== 'undefined')) {
       /*
       If a priority has been set at a certain path, its format isn't {"some key": "some value"}
       but instead it's {"some key": {".priority": "some priority", ".value": "some value"} }
@@ -678,10 +676,11 @@ export class DatabaseInternal {
       value = value['.value'];
     }
 
+    let isObject: boolean;
+
     if (value === null) {
       isObject = false;
-    }
-    else if (typeof value === 'object') {
+    } else if (typeof value === 'object') {
       isObject = true;
       Object.getOwnPropertyNames(value).forEach((key: string) => {
         const childPath = path.child(key);
