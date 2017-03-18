@@ -7,7 +7,7 @@ import { base64Sha1 } from './utils/base64';
  */
 export class DataModel {
   private _children: { [k: string]: DataModel } = {};
-  private value: boolean | string | number | any[] | null = null;
+  private _value: boolean | string | number | any[] | null = null;
   private _hash: string | null = null;
 
   constructor(public key: string | null = null,
@@ -34,11 +34,11 @@ export class DataModel {
   setData(data: boolean | string | number | { [k: string]: any } | any[]): DataModel {
 
     if (data === null) {
-      this.value = null;
+      this._value = null;
     } else if (typeof data === 'boolean' || typeof data === 'string' || typeof data === 'number' || data instanceof Array) {
-      this.value = data;
+      this._value = data;
     } else {
-      this.value = null;
+      this._value = null;
 
       for (let key in data) {
         if (data.hasOwnProperty(key) && (data[key] !== null)) {
@@ -79,7 +79,7 @@ export class DataModel {
         clone._children[key] = this._children[key].clone();
       }
     } else {
-      clone.value = this.value;
+      clone._value = this._value;
     }
 
     return clone;
@@ -99,7 +99,7 @@ export class DataModel {
       return obj;
     }
 
-    return this.value;
+    return this._value;
   }
 
   exists(): boolean {
@@ -124,7 +124,7 @@ export class DataModel {
   }
 
   hasValue(): boolean {
-    return this.value !== null;
+    return this._value !== null;
   }
 
   numChildren(): number {
@@ -140,8 +140,12 @@ export class DataModel {
   }
 
   private _getValueHash(): string {
-    const valueType = typeof this.value;
-    const str = valueType + ':' + ((valueType === 'number') ? toIEEE754Hex(<number>this.value) : this.value);
+    if (this._value === null) {
+      return '';
+    }
+
+    const valueType = typeof this._value;
+    const str = valueType + ':' + ((valueType === 'number') ? toIEEE754Hex(<number>this._value) : this._value);
     return base64Sha1(str);
   }
 
