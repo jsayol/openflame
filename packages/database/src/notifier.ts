@@ -45,13 +45,13 @@ export class Notifier {
         downLevels -= 1;
 
         newModel.forEachChild((key: string, child: DataModel) => {
-          const childPath = path.child(key);
-          this.trigger(childPath, oldModel.child(childPath), child, tag, false, downLevels);
+          this.trigger(path.child(key), oldModel.child(key), child, tag, false, downLevels);
         });
       }
     }
 
-    // In general we emit on the notifier's subject, but in some cases we want to emit on some other subject
+    // In general we emit on the notifier's own subject, but in some cases we want to emit on
+    // some other subject. For example, when emiting cached data for a single listener.
     const subject = _subject || this._subject;
 
     // TODO: detect and trigger "child_moved" events

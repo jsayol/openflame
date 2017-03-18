@@ -251,14 +251,6 @@ export class DatabaseInternal {
     return this._serverInfo.timeDiff;
   }
 
-  get model() {
-    return this._model;
-  }
-
-  get notifier() {
-    return this._notifier;
-  }
-
   private init() {
     const dbURLmatch = this._databaseURL.trim().match(/^http(s?):\/\/(([^\.]+)\.(.+))$/);
 
@@ -400,8 +392,6 @@ export class DatabaseInternal {
   }
 
   private processMessage(msg: object) {
-    // console.log(JSON.stringify(msg, null, 2));
-
     switch (msg['t']) {
       case 'c':
         this.processConnectionMessage(msg);

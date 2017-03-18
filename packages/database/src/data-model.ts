@@ -12,13 +12,19 @@ export class DataModel {
 
   constructor(public key: string | null = null,
               public parent: DataModel | null = null,
-              data: boolean | string | number | { [k: string]: any } | any[] = {}) {
+              data?: boolean | string | number | { [k: string]: any } | any[]) {
 
     // TODO: There should be a check for circular references somewhere in here
 
-    this.setData(data);
+    if (typeof data !== 'undefined') {
+      this.setData(data);
+    }
   }
 
+  /**
+   * Returns the root of this data model
+   * @returns {DataModel}
+   */
   get root(): DataModel {
     let model: DataModel = this;
 
@@ -27,11 +33,35 @@ export class DataModel {
     return model;
   }
 
+  /**
+   * Returns the children for this data model
+   * @returns {[DataModel,DataModel,DataModel,DataModel,DataModel]}
+   */
   get children(): DataModel[] {
     return Object.getOwnPropertyNames(this._children).map((key: string) => this._children[key]);
   }
 
-  setData(data: boolean | string | number | { [k: string]: any } | any[]): DataModel {
+  /**
+   * Returns the current path where this data model resides
+   * @returns {Path}
+   */
+  get path(): Path {
+    const parts: string[] = [];
+
+    for (let model = <DataModel>this; model && model.key !== null; model = model.parent) {
+      parts.unshift(model.key)
+    }
+
+    return new Path(parts);
+  }
+
+  /**
+   * Sets the data for this data model
+   * @param data
+   * @param invalidateAncestorHashes
+   * @returns {DataModel}
+   */
+  setData(data: boolean | string | number | { [k: string]: any } | any[], invalidateAncestorHashes = true): DataModel {
     // TODO: transform Firebase array-like objects to actual arrays: {"0":"abc", "1":"def"} to ["abc", "def"]
 
     if (data && (typeof data['.value'] !== 'undefined')) {
@@ -51,9 +81,22 @@ export class DataModel {
     } else {
       this._value = null;
 
-      for (let key in data) {
-        if (data.hasOwnProperty(key) && (data[key] !== null)) {
-          this._children[key] = new DataModel(key, this, data[key]);
+      Object.getOwnPropertyNames(data).forEach((key: string) => {
+        // this._children[key] = new DataModel(key, this, data[key]);
+        this.child(key).setData(data[key], false);
+      });
+    }
+
+    // Invalidate the hash for this model
+    if (this._hash) {
+      this._hash = null;
+    }
+
+    if (invalidateAncestorHashes) {
+      // Invalidate the hashes for all this model's ancestors
+      for (let model = this.parent; model; model = model.parent) {
+        if (model._hash) {
+          model._hash = null;
         }
       }
     }
@@ -61,34 +104,39 @@ export class DataModel {
     return this;
   }
 
-  child(path: Path | string): DataModel {
-    if (typeof path === 'string') {
-      path = new Path(path);
-    }
+  child(path: Path | string | string[]): DataModel {
+    let parts: string[];
 
-    const parts = path.parts;
+    if (typeof path === 'string') {
+      parts = Path.getParts(path);
+    } else if (path instanceof Path) {
+      parts = path.parts;
+    } else {
+      parts = path;
+    }
 
     if (parts.length === 0)
       return this;
 
-    const key = <any>parts.shift();
+    const key = parts.shift();
 
     if (typeof this._children[key] === 'undefined') {
       this._children[key] = new DataModel(key, this);
     }
 
-    return this._children[key].child(new Path(parts));
+    const childModel = this._children[key];
+
+    if (parts.length === 0)
+      return childModel;
+
+    return childModel.child(parts);
   }
 
   clone(): DataModel {
     const clone = new DataModel(this.key, this.parent);
-    const childKeys = Object.getOwnPropertyNames(this._children);
 
-    if (childKeys.length > 0) {
-      for (let i = 0, l = childKeys.length; i < l; i++) {
-        const key = childKeys[i];
-        clone._children[key] = this._children[key].clone();
-      }
+    if (this.hasChildren()) {
+      this.forEachChild((key: string, child: DataModel) => clone._children[key] = child.clone());
     } else {
       clone._value = this._value;
     }
