@@ -4,13 +4,17 @@
   "author": "Josep Sayol <josep.sayol@gmail.com>",
   "license": "MIT",
   "scripts": {
-    "build": "lerna run clean && npm run build:core && npm run build:database && npm run build:auth",
-    "build:core": "cd packages/core && npm run build",
-    "build:database": "cd packages/database && npm run build",
-    "build:auth": "cd packages/auth && npm run build",
+    "build": "lerna run clean && yarn run build:core && yarn run build:database && yarn run build:auth",
+    "build:core": "cd packages/core && yarn run build",
+    "build:database": "cd packages/database && yarn run build",
+    "build:auth": "cd packages/auth && yarn run build",
     "clean": "lerna run clean",
     "postinstall": "lerna bootstrap",
-    "reboot": "npm run clean && lerna clean --yes && lerna bootstrap"
+    "reboot": "yarn run clean && lerna clean --yes && lerna bootstrap",
+    "publish": "lerna publish --skip-npm --exact -m \"chore: release new version\" && yarn run build && yarn run publish:core && yarn run publish:database && yarn run publish:auth",
+    "publish:core": "lerna run --scope @openflame/core publish",
+    "publish:database": "lerna run --scope @openflame/database publish",
+    "publish:auth": "lerna run --scope @openflame/auth publish"
   },
   "devDependencies": {
     "awesome-typescript-loader": "^3.1.2",

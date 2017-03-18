@@ -8,14 +8,15 @@
   "typings": "release/src/index.d.ts",
   "license": "MIT",
   "scripts": {
-    "build": "npm run build:js && npm run build:umd:dev && npm run build:umd:prod",
+    "build": "yarn run build:js && yarn run build:umd:dev && yarn run build:umd:prod",
     "build:js": "tsc -p tsconfig.json",
     "build:umd:dev": "cross-env NODE_ENV=dev webpack",
     "build:umd:prod": "cross-env NODE_ENV=production webpack -p",
     "clean": "rimraf release",
     "release": "cpy README.md ../../LICENSE ./release && node ../../utils/copy-package-json.js database",
-    "prebuild": "npm run clean",
-    "postbuild": "npm run release"
+    "prebuild": "yarn run clean",
+    "postbuild": "yarn run release",
+    "publish": "cd release && npm publish"
   },
   "repository": {
     "type": "git",
