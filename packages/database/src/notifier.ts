@@ -13,6 +13,21 @@ import 'rxjs/add/operator/share';
  */
 export class Notifier {
   private _subject = new Subject<NotifierEvent>();
+  private _paused = false;
+
+  /**
+   * Prevents the notifier from processing and emitting any new events. Useful when bootstrapping.
+   */
+  pause() {
+    this._paused = true;
+  }
+
+  /**
+   * Tells the notifier to resume processing and emitting any new events
+   */
+  resume() {
+    this._paused = false;
+  }
 
   forListener(listener: DataListener, mergeWith?: ObservableInput<NotifierEvent>): Observable<DataSnapshot> {
     let notifier$ = this._subject.asObservable();
@@ -39,6 +54,10 @@ export class Notifier {
           bubbleUp = false,
           downLevels = Infinity,
           _subject?: Subject<NotifierEvent>) {
+
+    if (this._paused) {
+      return;
+    }
 
     if (newModel.hasChildren()) {
       if (downLevels > 0) {

@@ -7,10 +7,10 @@ import 'rxjs/add/operator/filter';
  *
  */
 export class Database implements OpenflameComponent {
-  private db: DatabaseInternal;
+  private _db: DatabaseInternal;
 
   constructor(public app: Openflame) {
-    this.db = new DatabaseInternal(app.config.databaseURL);
+    this._db = new DatabaseInternal(app.config.databaseURL);
 
     // Subscribe to messages from other components
     OpenflameComponent.message$
@@ -18,8 +18,17 @@ export class Database implements OpenflameComponent {
       .subscribe((msg: OpenflameComponentMessage) => this.processComponentMessage(msg));
   }
 
+  /**
+   * Initialize the internal data model with any data
+   * @param data
+   */
+  bootstrap(data: any): Database {
+    this._db.bootstrap(data);
+    return this;
+  }
+
   ref(path?: string): Reference {
-    return new Reference(path, this.db);
+    return new Reference(path, this._db);
   }
 
   refFromURL(url: string): Reference {
@@ -44,7 +53,7 @@ export class Database implements OpenflameComponent {
             // The user has authenticated, let's reflect that on the database
             const user: any = msg.payload.user;
             if (user) {
-              user.getToken().then(token => this.db.sendDataMessage('auth', null, {
+              user.getToken().then(token => this._db.sendDataMessage('auth', null, {
                 cred: token
               }));
             }

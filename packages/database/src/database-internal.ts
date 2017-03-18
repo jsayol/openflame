@@ -68,6 +68,16 @@ export class DatabaseInternal {
   }
 
   /**
+   * Initialize the internal data model with any data
+   * @param data
+   */
+  bootstrap(data: any) {
+    this._notifier.pause();
+    this._model.setData(data);
+    this._notifier.resume();
+  }
+
+  /**
    * Adds a new listener to the database, based on a `Query`
    * @param query
    * @param type
