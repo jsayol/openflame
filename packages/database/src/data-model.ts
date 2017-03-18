@@ -62,6 +62,8 @@ export class DataModel {
    * @returns {DataModel}
    */
   setData(data: boolean | string | number | { [k: string]: any } | any[], invalidateAncestorHashes = true): DataModel {
+    let removeSelf = false;
+
     // TODO: transform Firebase array-like objects to actual arrays: {"0":"abc", "1":"def"} to ["abc", "def"]
 
     if (data && (typeof data['.value'] !== 'undefined')) {
@@ -74,17 +76,16 @@ export class DataModel {
       data = data['.value'];
     }
 
+    this._children = {};
+
     if (data === null) {
+      removeSelf = true;
       this._value = null;
     } else if (typeof data === 'boolean' || typeof data === 'string' || typeof data === 'number' || data instanceof Array) {
       this._value = data;
     } else {
       this._value = null;
-
-      Object.getOwnPropertyNames(data).forEach((key: string) => {
-        // this._children[key] = new DataModel(key, this, data[key]);
-        this.child(key).setData(data[key], false);
-      });
+      Object.getOwnPropertyNames(data).forEach((key: string) => this.child(key).setData(data[key], false));
     }
 
     // Invalidate the hash for this model
@@ -99,6 +100,10 @@ export class DataModel {
           model._hash = null;
         }
       }
+    }
+
+    if (removeSelf && this.parent) {
+      this.parent.removeChild(this.key);
     }
 
     return this;
@@ -132,33 +137,39 @@ export class DataModel {
     return childModel.child(parts);
   }
 
-  clone(): DataModel {
-    const clone = new DataModel(this.key, this.parent);
+  removeChild(key: string) {
+    delete this._children[key];
+  }
 
-    if (this.hasChildren()) {
-      this.forEachChild((key: string, child: DataModel) => clone._children[key] = child.clone());
-    } else {
+  clone(parent: DataModel = this.parent): DataModel {
+    const clone = new DataModel(this.key, parent);
+
+    if (this.hasValue()) {
       clone._value = this._value;
+    } else {
+      this.forEachChild((key: string, child: DataModel) => clone._children[key] = child.clone(clone));
     }
 
     return clone;
   }
 
   toObject(): object | boolean | string | number | any[] | null {
-    const childKeys = Object.getOwnPropertyNames(this._children);
-
-    if (childKeys.length > 0) {
-      const obj = {};
-
-      for (let i = 0, l = childKeys.length; i < l; i++) {
-        const key = childKeys[i];
-        obj[key] = this._children[key].toObject();
-      }
-
-      return obj;
+    if (this.hasValue()) {
+      return this._value;
     }
 
-    return this._value;
+    const obj = {};
+    let hasValidChildren = false;
+
+    this.forEachChild((key: string, child: DataModel) => {
+      const value = child.toObject();
+      if (value !== null) {
+        obj[key] = value;
+        hasValidChildren = true;
+      }
+    });
+
+    return hasValidChildren ? obj : null;
   }
 
   exists(): boolean {
@@ -187,7 +198,8 @@ export class DataModel {
   }
 
   numChildren(): number {
-    return Object.getOwnPropertyNames(this._children).length;
+    const childKeys = Object.getOwnPropertyNames(this._children);
+    return childKeys.reduce((acc, val) => this._children[val].exists() ? acc + 1 : acc, 0);
   }
 
   forEachChild(fn: (key: string, child: DataModel) => any) {
