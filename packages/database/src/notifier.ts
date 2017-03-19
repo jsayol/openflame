@@ -78,7 +78,6 @@ export class Notifier {
         downLevels -= 1;
 
         newModel.forEachChild((key: string, child: DataModel) => {
-          // this.trigger(path.child(key), oldModel.child(key), child, tag, false, path, downLevels, _subject);
           this.trigger(path.child(key), oldModel.child(key), child, tag, {
             bubbleUpChildChangedUntil: path,
             downLevels,
@@ -135,6 +134,30 @@ export class Notifier {
            be done inside or after the notifier's filter. Look into it.
            */
           subject.next({...notification, type: 'child_added', path: parentPath, model: newModel});
+
+          // Bubble up a "child_added" event for any ancestors of this
+          // node's parent until the path exists in the old model
+          let parentPathParent = parentPath.parent;
+
+          if (parentPathParent) {
+            let parentPathChild = parentPath;
+            let oldModelParent = oldModel.parent;
+            let newModelParent = newModel.parent;
+
+            while (parentPathParent && !oldModelParent.child(parentPathChild.key).exists()) {
+              subject.next({
+                ...notification,
+                type: 'child_added',
+                path: parentPathParent,
+                model: newModelParent
+              });
+
+              oldModelParent = oldModelParent.parent;
+              newModelParent = newModelParent.parent;
+              parentPathChild = parentPathChild.parent;
+              parentPathParent = parentPathParent.parent;
+            }
+          }
         }
       }
 
@@ -222,7 +245,6 @@ export interface NotifierEvent {
   optimisticEvents?: NotifierEvent[];
   rollbackModel?: DataModel;
 }
-
 
 interface TriggerOptions {
   bubbleUpValue?: boolean;
