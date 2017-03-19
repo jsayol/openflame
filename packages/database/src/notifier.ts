@@ -4,6 +4,7 @@ import { DataModel } from './data-model';
 import { Path } from './path';
 import { Subject } from 'rxjs/Subject';
 import { Observable, ObservableInput } from 'rxjs/Observable';
+import 'rxjs/add/operator/do';
 import 'rxjs/add/operator/map';
 import 'rxjs/add/operator/filter';
 import 'rxjs/add/operator/share';
@@ -44,6 +45,12 @@ export class Notifier {
           && (event.type === listener.type)
           && listener.query.path.isEqual(event.path);
       })
+      .do((event: NotifierEvent) => {
+        // Let's keep track of all the "optimistic" updates in case we need to roll them back
+        if (event.optimisticEvents) {
+          event.optimisticEvents.push(event);
+        }
+      })
       .map((event: NotifierEvent): DataSnapshot => new DataSnapshot(listener.query, event.model));
   }
 
@@ -57,8 +64,11 @@ export class Notifier {
             downLevels = Infinity,
             skipEqualityCheck = false,
             useSubject,
+            optimisticEvents,
           }: TriggerOptions = {}) {
 
+    // If the notifier has been paused, don't do anything.
+    // This is used when bootstrapping with locally-stored data.
     if (this._paused) {
       return;
     }
@@ -72,7 +82,8 @@ export class Notifier {
           this.trigger(path.child(key), oldModel.child(key), child, tag, {
             bubbleUpChildChangedUntil: path,
             downLevels,
-            useSubject
+            useSubject,
+            optimisticEvents
           });
         });
       }
@@ -82,8 +93,8 @@ export class Notifier {
     // some other subject. For example, when emiting cached data for a single listener.
     const subject = useSubject || this._subject;
 
+    const notification = {tag, optimisticEvents};
     let parentPath = path.parent;
-
     let modelHasChanged: boolean = skipEqualityCheck ? true : undefined;
 
     if (parentPath) {
@@ -95,8 +106,9 @@ export class Notifier {
       if (oldModel.exists()) {
         if (!newModel.exists()) {
           // Trigger "child_removed" on the parent for this node
-          if (path.parent)
-            subject.next({type: 'child_removed', path: parentPath, model: oldModel, tag});
+          if (path.parent) {
+            subject.next({...notification, type: 'child_removed', path: parentPath, model: oldModel});
+          }
 
           // Trigger value and child_removed for any descendants
           this.cascadeNodeRemoved(path, oldModel, tag, false);
@@ -104,7 +116,13 @@ export class Notifier {
           // Trigger "child changed" event for this node if the data has changed
           // FIXME: Checking model equality here is incredibly wasteful. Find a better option.
           if ((modelHasChanged === true) || !newModel.isEqual(oldModel)) {
-            subject.next({type: 'child_changed', path: parentPath, model: newModel, tag});
+            subject.next({
+              ...notification,
+              type: 'child_changed',
+              path: parentPath,
+              model: newModel,
+              rollbackModel: optimisticEvents && oldModel
+            });
             modelHasChanged = true;
           } else {
             modelHasChanged = false;
@@ -116,7 +134,7 @@ export class Notifier {
            The official SDK also passes the key for the previous child by sort order. Maybe that could
            be done inside or after the notifier's filter. Look into it.
            */
-          subject.next({type: 'child_added', path: parentPath, model: newModel, tag});
+          subject.next({...notification, type: 'child_added', path: parentPath, model: newModel});
         }
       }
 
@@ -126,7 +144,13 @@ export class Notifier {
       parentPath = parentPath.parent;
 
       while (parentPath && !parentPath.includesOrEqualTo(bubbleUpChildChangedUntil)) {
-        subject.next({type: 'child_changed', path: parentPath, model: model, tag});
+        subject.next({
+          ...notification,
+          type: 'child_changed',
+          path: parentPath,
+          model: model,
+          rollbackModel: optimisticEvents && oldModel.root.child(model.path)
+        });
         parentPath = parentPath.parent;
         model = model.parent;
       }
@@ -135,16 +159,31 @@ export class Notifier {
     // FIXME: Same as before, checking model equality here is incredibly wasteful. Find a better option.
     if (modelHasChanged || ((typeof modelHasChanged === 'undefined') && !newModel.isEqual(oldModel))) {
       // Emit a "value" event for this path
-      subject.next({type: 'value', path: path, model: newModel, tag});
+      subject.next({
+        ...notification,
+        type: 'value',
+        path: path,
+        model: newModel,
+        rollbackModel: optimisticEvents && oldModel
+      });
 
       if (bubbleUpValue) {
-        // bubble up a "value" event for any ancestors of this node
+        // Bubble up a "value" event for any ancestors of this node
         let bubbleUpModel = newModel;
+        let bubbleUpRollbackModel = oldModel;
         let bubbleUpPath = path;
 
         while (bubbleUpModel.parent) {
-          subject.next({type: 'value', path: bubbleUpPath.parent, model: bubbleUpModel.parent, tag});
+          subject.next({
+            ...notification,
+            type: 'value',
+            path: bubbleUpPath.parent,
+            model: bubbleUpModel.parent,
+            rollbackModel: optimisticEvents && bubbleUpRollbackModel.parent
+          });
+
           bubbleUpModel = bubbleUpModel.parent;
+          bubbleUpRollbackModel = bubbleUpRollbackModel.parent;
           bubbleUpPath = bubbleUpPath.parent;
         }
       }
@@ -180,6 +219,8 @@ export interface NotifierEvent {
   path: Path;
   model: DataModel;
   tag?: number; // Query tag
+  optimisticEvents?: NotifierEvent[];
+  rollbackModel?: DataModel;
 }
 
 
@@ -189,4 +230,5 @@ interface TriggerOptions {
   downLevels?: number;
   skipEqualityCheck?: boolean;
   useSubject?: Subject<NotifierEvent>;
+  optimisticEvents?: NotifierEvent[];
 }

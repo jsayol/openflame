@@ -224,7 +224,7 @@ export class DatabaseInternal {
 
   }
 
-  sendDataMessage(type: string, query: Query | null, payload: any): Promise<any> {
+  sendDataMessage(type: string, query: Query | null, payload: any, optimisticEvents?: NotifierEvent[]): Promise<any> {
     return new Promise((resolve, reject) => {
       if (!this._ready) {
         // If the connection to the database is not ready yet, just queue the message for later
@@ -234,6 +234,7 @@ export class DatabaseInternal {
           type,
           query,
           payload,
+          optimisticEvents
         });
 
         return;
@@ -250,7 +251,8 @@ export class DatabaseInternal {
         resolve,
         reject,
         data,
-        query
+        query,
+        optimisticEvents
       };
 
       this.send({
@@ -258,6 +260,30 @@ export class DatabaseInternal {
         d: data
       });
     });
+  }
+
+  updateModel(path: Path, value: any, {tag = 0, optimisticEvents}: { tag?: number, optimisticEvents?: NotifierEvent[] } = {}) {
+    /*
+     TODO: Figure out which approach is best:
+     1. Current, naive approach: emit every single possible event and let the listeners' notifiers filter them out.
+     2. Queue the events and later loop through all the listeners to figure out which ones we need to emit
+
+     The current one is more flexible, but it might not offer very good performance with large updates and lots of listeners.
+     I should probably do some complexity calculations to figure it out, and some perf benchmarking wouldn't hurt.
+     */
+
+    // Keep the current state of the model at this path
+    const oldModel = this._model.child(path);
+
+    // If the value is a DataModel, use it as the new model at this path (used for optimistic update rollbacks).
+    // Otherwise clone the model at this path, discarding any data it had, and update it with the new data.
+    const newModel = value instanceof DataModel ? value : oldModel.clone({keepData: false}).setData(value);
+
+    // Set the new model's root as the current one
+    this._model = newModel.cloneToRoot();
+
+    // Trigger notication events for the listeners
+    this._notifier.trigger(path, oldModel, this._model.child(path), tag, {bubbleUpValue: true, optimisticEvents});
   }
 
   get timeDiff(): number {
@@ -342,7 +368,8 @@ export class DatabaseInternal {
       resolve: req.resolve,
       reject: req.reject,
       data: req.data,
-      query: req.query
+      query: req.query,
+      optimisticEvents: req.optimisticEvents
     };
 
     this.send({
@@ -525,7 +552,11 @@ export class DatabaseInternal {
       } else {
         const path = request.query ? ' at ' + request.query.path.toString() : '';
 
-        // TODO: should we do something with these errors, other than reject the request?
+        // If this was an optimistic update, roll back any notified changes
+        if (request.optimisticEvents) {
+          this.rollbackOptimisticUpdate(request.optimisticEvents);
+        }
+
         request.reject(new Error(`${status}${path}: ${response.d}`));
       }
 
@@ -601,11 +632,12 @@ export class DatabaseInternal {
     });
 
     const sendQueuedMessage = (msg: any) => {
-      const {resolve, reject, type, query, payload} = msg;
+      const {resolve, reject, type, query, payload, optimisticEvents} = msg;
       this.resendDataMessage({
         resolve,
         reject,
         query,
+        optimisticEvents,
         data: {
           r: 0, // this will be discarded
           a: type,
@@ -636,37 +668,14 @@ export class DatabaseInternal {
     // Query "tag"
     const tag: number = data.t;
 
-    this.updateModel(path, value, tag);
+    this.updateModel(path, value, {tag});
   }
 
   private processMultipathData(data: { [k: string]: any }) {
     // TODO: sanity check on the data? It comes from the server, but still.
     Object.getOwnPropertyNames(data.d).forEach((key: string) => {
-      this.updateModel(new Path(data.p).child(key), data.d[key], data.t);
+      this.updateModel(new Path(data.p).child(key), data.d[key], {tag: data.t});
     });
-  }
-
-  private updateModel(path: Path, value: any, tag: number = 0) {
-    /*
-     TODO: Figure out which approach is best:
-     1. Current, naive approach: emit every single possible event and let the listeners' notifiers filter them out.
-     2. Queue the events and later loop through all the listeners to figure out which ones we need to emit
-
-     The current one is more flexible, but it might not offer very good performance with large updates and lots of listeners.
-     I should probably do some complexity calculations to figure it out, and some perf benchmarking wouldn't hurt.
-     */
-
-    // Keep the current state of the model at this path
-    const oldModel = this._model.child(path);
-
-    // Clone the model at this path, discarding any data it had, and update it with the new data
-    const newModel = oldModel.clone({keepData: false}).setData(value);
-
-    // Set the new model's root as the current one
-    this._model = newModel.cloneToRoot();
-
-    // Trigger notication events for the listeners
-    this._notifier.trigger(path, oldModel, this._model.child(path), tag, {bubbleUpValue: true});
   }
 
   private processDataMessageWarnings(reqNumber: number, warnings: string[]) {
@@ -683,6 +692,34 @@ export class DatabaseInternal {
     });
   }
 
+  /**
+   * Rolls back any model changes and notifier events triggered as part of
+   * an optimistic update that was rejected.
+   * @param optimisticEvents
+   */
+  private rollbackOptimisticUpdate(optimisticEvents: NotifierEvent[]) {
+    while (optimisticEvents.length) {
+      const event = optimisticEvents.shift();
+
+      switch (event.type) {
+        case 'value':
+          this.updateModel(event.path, event.rollbackModel, {tag: event.tag});
+          break;
+        case 'child_added':
+          this.updateModel(event.path.child(event.model.key), null, {tag: event.tag});
+          break;
+        case 'child_removed':
+          this.updateModel(event.path.child(event.model.key), event.model, {tag: event.tag});
+          break;
+        case 'child_changed':
+          this.updateModel(event.path.child(event.model.key), event.rollbackModel, {tag: event.tag});
+          break;
+        case 'child_moved':
+          // TODO: handle "child_moved" rollbacks after implementing this type of event
+          break;
+      }
+    }
+  }
 }
 
 
@@ -715,6 +752,7 @@ interface SentDataRequest {
   reject: (val) => void;
   data: any;
   query: Query | null;
+  optimisticEvents?: NotifierEvent[];
 }
 
 /**

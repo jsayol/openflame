@@ -2,6 +2,7 @@ import { DatabaseInternal } from './database-internal';
 import { Query } from './query';
 import { Path } from './path';
 import { OnDisconnect } from "./on-disconnect";
+import { NotifierEvent } from "./notifier";
 
 /**
  * The characters used to generate the push IDs.
@@ -70,27 +71,35 @@ export class Reference extends Query {
   }
 
   set(value: any): Promise<void> {
-    // TODO: trigger locally if there are any listeners for this path
     // TODO: if `value` is an object, check its keys for invalid paths
     // TODO: transform arrays to Firebase array-like objects: ["abc", "def"] to {"0":"abc", "1":"def"}
+
+    // Do an optimistic update
+    const optimisticEvents: NotifierEvent[] = [];
+    this.db.updateModel(this.path, value, {optimisticEvents});
 
     return this.db
       .sendDataMessage('p', this, {
         p: this.path.toString(),
         d: value
-      })
+      }, optimisticEvents)
       .then(() => void 0);
   }
 
   update(values: { [k: string]: any }): Promise<void> {
-    // TODO: trigger locally if there are any listeners for this path, or the nested ones in `values`
     // TODO: check the `values` keys for invalid paths
+
+    // Do an optimistic update
+    const optimisticEvents: NotifierEvent[] = [];
+    Object.getOwnPropertyNames(values).forEach((subpath: string) => {
+      this.db.updateModel(this.path.child(subpath), values[subpath], {optimisticEvents});
+    });
 
     return this.db
       .sendDataMessage('m', this, {
         p: this.path.toString(),
         d: values
-      })
+      }, optimisticEvents)
       .then(() => void 0);
   }
 
