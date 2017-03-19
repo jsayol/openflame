@@ -10,13 +10,13 @@ import 'rxjs/add/operator/observeOn';
 import 'rxjs/add/observable/of';
 import 'rxjs/add/observable/from';
 import 'rxjs/add/observable/dom/webSocket';
-import { async as asyncScheduler } from "rxjs/scheduler/async";
+import { async as asyncScheduler } from 'rxjs/scheduler/async';
 
 import { Query } from './query';
 import { Path } from './path';
 import { DataModel } from './data-model';
 import { DataSnapshot } from './data-snapshot';
-import { Notifier, NotifierEvent } from "./notifier";
+import { Notifier, NotifierEvent } from './notifier';
 
 
 /**

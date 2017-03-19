@@ -1,5 +1,5 @@
 import { DatabaseInternal } from './database-internal';
-import { Query } from "./query";
+import { Query } from './query';
 
 export class OnDisconnect {
   private path: string;

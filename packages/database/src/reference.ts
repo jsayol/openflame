@@ -4,7 +4,6 @@ import { Path } from './path';
 import { OnDisconnect } from './on-disconnect';
 import { NotifierEvent } from './notifier';
 import { generatePushKey } from './utils/push-key';
-// import { ThenableReference } from "./thenable-reference";
 
 export class Reference extends Query {
   private _onDisconnect: OnDisconnect;

@@ -27,6 +27,4 @@ if (root) {
 }
 
 
-
-
 export * from './core';

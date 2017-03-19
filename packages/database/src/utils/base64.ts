@@ -1,7 +1,7 @@
 import { toUTFByteArray } from './utf8';
 import { Sha1 } from './sha1';
 
-const BASE64_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
+const BASE64_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
 let byteToCharMap = null;
 
 function initCharMap() {
