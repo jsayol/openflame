@@ -155,10 +155,13 @@ export class DatabaseInternal {
     // We use the async scheduler to ensure subscription happens after exiting addListener()
     if ((type === 'value') || (type === 'child_added')) {
       addWatch$.observeOn(asyncScheduler).subscribe(() => {
-        const downLevels = type === 'value' ? 0 : 1;
         const newModel = this._model.child(query.path);
         const oldModel = new DataModel(newModel.key, newModel.parent);
-        this._notifier.trigger(query.path, oldModel, newModel, newListener.tag, false, null, downLevels, current$);
+        this._notifier.trigger(query.path, oldModel, newModel, newListener.tag, {
+          downLevels: type === 'value' ? 0 : 1,
+          useSubject: current$,
+          skipEqualityCheck: true
+        });
       });
     }
 
@@ -656,14 +659,14 @@ export class DatabaseInternal {
     // Keep the current state of the model at this path
     const oldModel = this._model.child(path);
 
-    // Clone the model at this path, discarding any data it may have, and update it with the new data
+    // Clone the model at this path, discarding any data it had, and update it with the new data
     const newModel = oldModel.clone({keepData: false}).setData(value);
 
     // Set the new model's root as the current one
     this._model = newModel.cloneToRoot();
 
     // Trigger notication events for the listeners
-    this._notifier.trigger(path, oldModel, this._model.child(path), tag, true);
+    this._notifier.trigger(path, oldModel, this._model.child(path), tag, {bubbleUpValue: true});
   }
 
   private processDataMessageWarnings(reqNumber: number, warnings: string[]) {

@@ -141,16 +141,7 @@ export class DataModel {
     delete this._children[key];
   }
 
-  clone({
-          parent = this.parent,
-          keepData = true,
-          shallow = false
-        }: {
-          parent?: DataModel,
-          keepData?: boolean,
-          shallow?: boolean
-        } = {}): DataModel {
-
+  clone({parent = this.parent, keepData = true, shallow = false}: CloneOptions = {}): DataModel {
     const clone = new DataModel(this.key, parent);
 
     if (keepData) {
@@ -248,6 +239,34 @@ export class DataModel {
     }
   }
 
+  /**
+   * Returns true if the two models contain the same data, false otherwise
+   * @param other
+   * @returns {any}
+   */
+  isEqual(other: DataModel): boolean {
+    if (!other)
+      return false;
+
+    if (this.hasValue() || other.hasValue())
+      return this._value === other._value;
+
+    const seenKeys: { [k: string]: true } = {};
+
+    const thisChildrenEqual = Object.getOwnPropertyNames(this._children).every((key: string) => {
+      seenKeys[key] = true;
+      const thisChild = this._children[key];
+      return !thisChild.exists() || thisChild.isEqual(other._children[key]);
+    });
+
+    if (!thisChildrenEqual)
+      return false;
+
+    return Object.getOwnPropertyNames(other._children).every((key: string) => {
+      return seenKeys[key] || !other._children[key].exists();
+    });
+  }
+
   get hash(): string {
     if (!this._hash) {
       this._hash = this.hasChildren() ? this._getObjectHash() : this._getValueHash();
@@ -279,5 +298,10 @@ export class DataModel {
     return str !== '' ? base64Sha1(str) : '';
   }
 
+}
 
+interface CloneOptions {
+  parent?: DataModel;
+  keepData?: boolean;
+  shallow?: boolean;
 }
