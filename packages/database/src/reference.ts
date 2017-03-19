@@ -1,9 +1,10 @@
 import { DatabaseInternal } from './database-internal';
 import { Query } from './query';
 import { Path } from './path';
-import { OnDisconnect } from "./on-disconnect";
-import { NotifierEvent } from "./notifier";
+import { OnDisconnect } from './on-disconnect';
+import { NotifierEvent } from './notifier';
 import { generatePushKey } from './utils/push-key';
+// import { ThenableReference } from "./thenable-reference";
 
 export class Reference extends Query {
   private _onDisconnect: OnDisconnect;
@@ -27,7 +28,7 @@ export class Reference extends Query {
     if (!this.path.length)
       return this;
 
-    return new Reference('/', this.db);
+    return new Reference('/', this._db);
   }
 
   /**
@@ -38,26 +39,30 @@ export class Reference extends Query {
    */
   get parent(): Reference | null {
     const parentPath = this.path.parent;
-    return parentPath ? new Reference(parentPath, this.db) : null;
+    return parentPath ? new Reference(parentPath, this._db) : null;
   }
 
   child(path: string): Reference {
-    return new Reference(this.path.child(path), this.db);
+    return new Reference(this.path.child(path), this._db);
   }
 
   onDisconnect(): OnDisconnect {
-    return this._onDisconnect || (this._onDisconnect = new OnDisconnect(this, this.db));
+    return this._onDisconnect || (this._onDisconnect = new OnDisconnect(this, this._db));
   }
 
-  push(value?: any): Reference {
-    const newRef = this.child(generatePushKey(this.db.timeDiff));
+  push(): Reference;
+  push(value: any): ThenableReference;
+  push(value?: any): Reference | ThenableReference {
+    const pushKey = generatePushKey(this._db.timeDiff);
 
-    if (typeof value !== 'undefined') {
-      // TODO: implement an equivalent to ThenableReference to be able to return this Promise
-      newRef.set(value);
+    if (typeof value === 'undefined') {
+      return this.child(pushKey);
     }
 
-    return newRef;
+    const thenableRef = new ThenableReference(this.path.child(pushKey), this._db);
+    thenableRef.set(value);
+
+    return thenableRef;
   }
 
   set(value: any): Promise<void> {
@@ -66,9 +71,9 @@ export class Reference extends Query {
 
     // Do an optimistic update
     const optimisticEvents: NotifierEvent[] = [];
-    this.db.updateModel(this.path, value, {optimisticEvents});
+    this._db.updateModel(this.path, value, {optimisticEvents});
 
-    return this.db
+    return this._db
       .sendDataMessage('p', this, {
         p: this.path.toString(),
         d: value
@@ -82,10 +87,10 @@ export class Reference extends Query {
     // Do an optimistic update
     const optimisticEvents: NotifierEvent[] = [];
     Object.getOwnPropertyNames(values).forEach((subpath: string) => {
-      this.db.updateModel(this.path.child(subpath), values[subpath], {optimisticEvents});
+      this._db.updateModel(this.path.child(subpath), values[subpath], {optimisticEvents});
     });
 
-    return this.db
+    return this._db
       .sendDataMessage('m', this, {
         p: this.path.toString(),
         d: values
@@ -98,7 +103,7 @@ export class Reference extends Query {
   }
 
   setPriority(priority: string | number | null): Promise<void> {
-    const newRef = new Reference(this.path.child('.priority', true), this.db);
+    const newRef = new Reference(this.path.child('.priority', true), this._db);
     return newRef.set(priority);
   }
 
@@ -111,4 +116,30 @@ export class Reference extends Query {
     });
   }
 
+}
+
+/**
+ * NOTE: This class should ideally be on a separate file but it needs to stay here
+ * for now due to a TypeScript bug: https://github.com/Microsoft/TypeScript/issues/14734
+ */
+export class ThenableReference extends Reference {
+  private _promise: Promise<void>;
+
+  constructor(path: Path, db: DatabaseInternal) {
+    super(path, db);
+  }
+
+  set(value: any): Promise<void> {
+    this._promise = super.set(value);
+    return this._promise;
+  }
+
+  then(onfulfilled?: (() => any) | undefined | null,
+       onrejected?: ((reason: any) => any) | undefined | null): Promise<void> {
+    return this._promise.then<void>(onfulfilled, onrejected);
+  }
+
+  catch<T>(onrejected?: ((reason: any) => T) | undefined | null): Promise<T> {
+    return this._promise.catch<T>(onrejected);
+  }
 }

@@ -11,16 +11,17 @@ import { Reference } from './reference';
 import { DataSnapshot } from './data-snapshot';
 
 export abstract class Query {
-  protected queryOptions: QueryOptions = {};
   readonly path: Path;
+  protected _queryOptions: QueryOptions = {};
+
   private static _offNotifier$ = new Subject<OffNotification>();
 
-  constructor(path: string | Path = '/', protected db: DatabaseInternal) {
+  constructor(path: string | Path = '/', protected _db: DatabaseInternal) {
     this.path = path instanceof Path ? path : new Path(path);
   }
 
   get ref(): Reference {
-    return new Reference(this.path, this.db);
+    return new Reference(this.path, this._db);
   }
 
   get value$() {
@@ -44,69 +45,69 @@ export abstract class Query {
   }
 
   orderByChild(name: string): Query {
-    if (this.queryOptions.orderBy)
+    if (this._queryOptions.orderBy)
       throw new Error(`DatabaseQuery.orderByChild: Order already set. You can't combine multiple orderBy calls.`);
 
-    this.queryOptions.orderBy = true;
-    this.queryOptions.index = name;
+    this._queryOptions.orderBy = true;
+    this._queryOptions.index = name;
 
     return this;
   }
 
   orderByKey(): Query {
-    if (this.queryOptions.orderBy)
+    if (this._queryOptions.orderBy)
       throw new Error(`DatabaseQuery.orderByKey: Order already set. You can't combine multiple orderBy calls.`);
 
-    this.queryOptions.orderBy = true;
-    this.queryOptions.index = '.key';
+    this._queryOptions.orderBy = true;
+    this._queryOptions.index = '.key';
 
     return this;
   }
 
   orderByValue(): Query {
-    if (this.queryOptions.orderBy)
+    if (this._queryOptions.orderBy)
       throw new Error(`DatabaseQuery.orderByValue: Order already set. You can't combine multiple orderBy calls.`);
 
-    this.queryOptions.orderBy = true;
-    this.queryOptions.index = '.value';
+    this._queryOptions.orderBy = true;
+    this._queryOptions.index = '.value';
 
     return this;
   }
 
   limitToFirst(limit: number): Query {
-    if (this.queryOptions.limitFrom)
-      throw new Error(`DatabaseQuery.limitToFirst: Limit was already set by a call to limitTo${this.queryOptions.limitFrom === 'l' ? 'First' : 'Last'}.`);
+    if (this._queryOptions.limitFrom)
+      throw new Error(`DatabaseQuery.limitToFirst: Limit was already set by a call to limitTo${this._queryOptions.limitFrom === 'l' ? 'First' : 'Last'}.`);
 
-    this.queryOptions.limit = limit;
-    this.queryOptions.limitFrom = 'l';
+    this._queryOptions.limit = limit;
+    this._queryOptions.limitFrom = 'l';
 
     return this;
   }
 
   limitToLast(limit: number): Query {
-    if (this.queryOptions.limitFrom)
-      throw new Error(`DatabaseQuery.limitToLast: Limit was already set by a call to limitTo${this.queryOptions.limitFrom === 'l' ? 'First' : 'Last'}.`);
+    if (this._queryOptions.limitFrom)
+      throw new Error(`DatabaseQuery.limitToLast: Limit was already set by a call to limitTo${this._queryOptions.limitFrom === 'l' ? 'First' : 'Last'}.`);
 
-    this.queryOptions.limit = limit;
-    this.queryOptions.limitFrom = 'r';
+    this._queryOptions.limit = limit;
+    this._queryOptions.limitFrom = 'r';
 
     return this;
   }
 
   startAt(value: any): Query {
-    if (typeof this.queryOptions.startAt !== 'undefined')
+    if (typeof this._queryOptions.startAt !== 'undefined')
       throw new Error(`DatabaseQuery.startAt: Starting point was already set by another call to startAt or equalTo.`);
 
-    this.queryOptions.startAt = value;
+    this._queryOptions.startAt = value;
 
     return this;
   }
 
   endAt(value: any): Query {
-    if (typeof this.queryOptions.startAt !== 'undefined')
+    if (typeof this._queryOptions.startAt !== 'undefined')
       throw new Error(`DatabaseQuery.endAt: Ending point was already set by another call to endAt or equalTo.`);
 
-    this.queryOptions.endAt = value;
+    this._queryOptions.endAt = value;
 
     return this;
   }
@@ -116,14 +117,14 @@ export abstract class Query {
   }
 
   isEqual(other: Query): boolean {
-    return (this.db === other.db) &&
+    return (this._db === other._db) &&
       this.path.isEqual(other.path) &&
-      (this.queryOptions.limit === other.queryOptions.limit) &&
-      (this.queryOptions.limitFrom === other.queryOptions.limitFrom) &&
-      (this.queryOptions.orderBy === other.queryOptions.orderBy) &&
-      (this.queryOptions.index === other.queryOptions.index) &&
-      (this.queryOptions.startAt === other.queryOptions.startAt) &&
-      (this.queryOptions.endAt === other.queryOptions.endAt);
+      (this._queryOptions.limit === other._queryOptions.limit) &&
+      (this._queryOptions.limitFrom === other._queryOptions.limitFrom) &&
+      (this._queryOptions.orderBy === other._queryOptions.orderBy) &&
+      (this._queryOptions.index === other._queryOptions.index) &&
+      (this._queryOptions.startAt === other._queryOptions.startAt) &&
+      (this._queryOptions.endAt === other._queryOptions.endAt);
   }
 
   on(type: EventType): Observable<DataSnapshot> {
@@ -132,11 +133,11 @@ export abstract class Query {
     }
 
     const on$ = Observable.create((observer: Observer<DataSnapshot>) => {
-      const {listener, notifier$} = this.db.addListener(this, type);
+      const {listener, notifier$} = this._db.addListener(this, type);
       const subscription = notifier$.subscribe(observer);
 
       return () => {
-        this.db.removeListener(listener);
+        this._db.removeListener(listener);
         subscription.unsubscribe();
       }
     });
@@ -172,24 +173,24 @@ export abstract class Query {
     const q: object = {};
     let hasQuery = false;
 
-    if (this.queryOptions.limitFrom) {
-      q['l'] = this.queryOptions.limit;
-      q['vf'] = this.queryOptions.limitFrom;
+    if (this._queryOptions.limitFrom) {
+      q['l'] = this._queryOptions.limit;
+      q['vf'] = this._queryOptions.limitFrom;
       hasQuery = true;
     }
 
-    if (this.queryOptions.orderBy) {
-      q['i'] = this.queryOptions.index;
+    if (this._queryOptions.orderBy) {
+      q['i'] = this._queryOptions.index;
       hasQuery = true;
     }
 
-    if (typeof this.queryOptions.startAt !== 'undefined') {
-      q['sp'] = this.queryOptions.startAt;
+    if (typeof this._queryOptions.startAt !== 'undefined') {
+      q['sp'] = this._queryOptions.startAt;
       hasQuery = true;
     }
 
-    if (typeof this.queryOptions.endAt !== 'undefined') {
-      q['ep'] = this.queryOptions.endAt;
+    if (typeof this._queryOptions.endAt !== 'undefined') {
+      q['ep'] = this._queryOptions.endAt;
       hasQuery = true;
     }
 
@@ -198,10 +199,10 @@ export abstract class Query {
 
   hasQuery(): boolean {
     return !!(
-      this.queryOptions.limitFrom
-      || this.queryOptions.orderBy
-      || (typeof this.queryOptions.startAt !== 'undefined')
-      || (typeof this.queryOptions.endAt !== 'undefined')
+      this._queryOptions.limitFrom
+      || this._queryOptions.orderBy
+      || (typeof this._queryOptions.startAt !== 'undefined')
+      || (typeof this._queryOptions.endAt !== 'undefined')
     );
   }
 
