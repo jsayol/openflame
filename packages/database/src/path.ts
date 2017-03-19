@@ -69,7 +69,7 @@ export class Path {
   }
 
   static getParts(path: string, skipCheck = false): string[] {
-    path = Path.normalize(path);
+    path = Path.normalize(path, skipCheck);
 
     if (path === '')
       return [];
