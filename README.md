@@ -34,7 +34,7 @@ Openflame has been built with modularity in mind from the very beginning, even i
 
 ## Examples
 
-Using only the database:
+### Using only the database:
 ```ts
 import { Openflame } from '@openflame/core';
 import { DataSnapshot } from '@openflame/database';
@@ -52,11 +52,11 @@ const openflame = new Openflame({
 const newMessage$ = openflame.database.ref('/messages').childAdded$;
 
 newMessage$.subscribe((snap: DataSnapshot) => {
-  console.log(`Hey, new message! It says:`, snap.child('content').val());
+  console.log('Hey, new message! It says:', snap.child('content').val());
 );
 ```
 
-Using authentication and the database:
+### Using authentication and the database:
 ```ts
 import { Openflame } from '@openflame/core';
 import { DataSnapshot } from '@openflame/database';
@@ -89,6 +89,65 @@ private$.subscribe((snap: DataSnapshot) => {
 });
 
 ```
+
+### Bootstrapping the database with locally-stored data. 
+Effectively, this allows to only receive new data and data that has changed. Use your prefered local storage solution to store and retrieve the data:
+```ts
+import { Openflame } from '@openflame/core';
+import { DataSnapshot } from '@openflame/database';
+
+import '@openflame/core/add/database';
+
+const openflame = new Openflame({
+  apiKey: "...",
+  authDomain: "...",
+  databaseURL: "...",
+  storageBucket: "...",
+  messagingSenderId: "..."
+});
+
+// You would usually retrieve this from local storage
+const locallyStoredData = {
+  messages: {
+    '-Kdr27CeOcH5wT0Jq_Av': {
+      from: 'Bob',
+      content: 'Hello!'
+    },
+    '-KdvZFR-vkmbZoFcUaTh': {
+      from: 'Alice',
+      content: 'Hi there'
+    },
+  }
+};
+
+openflame.database.bootstrap(locallyStoredData);
+
+const messagesRef = openflame.database.ref('/messages');
+
+messagesRef.childAdded$.subscribe((snap: DataSnapshot) => {
+  /*
+   * From this point on you will only get notified of messages that you don't
+   * already have.
+   * Besides that, the Firebase server won't initially send data for /messages unless
+   * there's been any changes, either due to new messages that you didn't have or
+   * changes to the ones that you did.
+   * That means you don't waste bandwidth and your users are happier :)
+   */
+  const msg = snap.val();
+  console.log(`New message from ${msg.from}! It says: "${msg.content}"`);
+);
+
+/*
+ * Let's send a new message.
+ * Openflame also does optimistic updates (yay!) which means the childAdded event
+ * will immediatley see the new message.
+ */
+messagesRef.push({
+  from: 'Josep',
+  content: 'Cool, huh?'
+});
+```
+
 ## Developing
 ```sh
 $ git clone https://github.com/jsayol/openflame.git
