@@ -171,6 +171,7 @@ export class DataModel {
     this.parent._children[this.key] = this;
 
     currentParent.forEachChild((key: string, child: DataModel) => {
+      child.parent = this.parent;
       if (key !== this.key) {
         this.parent._children[key] = child;
       }
