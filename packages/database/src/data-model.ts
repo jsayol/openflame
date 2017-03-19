@@ -141,16 +141,51 @@ export class DataModel {
     delete this._children[key];
   }
 
-  clone(parent: DataModel = this.parent): DataModel {
+  clone({
+          parent = this.parent,
+          keepData = true,
+          shallow = false
+        }: {
+          parent?: DataModel,
+          keepData?: boolean,
+          shallow?: boolean
+        } = {}): DataModel {
+
     const clone = new DataModel(this.key, parent);
 
-    if (this.hasValue()) {
-      clone._value = this._value;
-    } else {
-      this.forEachChild((key: string, child: DataModel) => clone._children[key] = child.clone(clone));
+    if (keepData) {
+      if (this.hasValue()) {
+        clone._value = this._value;
+      } else if (!shallow) {
+        this.forEachChild((key: string, child: DataModel) => {
+          clone._children[key] = child.clone({parent: clone});
+        });
+      }
     }
 
     return clone;
+  }
+
+  /**
+   * Clones a node's branch all the way up to the root, and returns the new root
+   * @returns {DataModel}
+   */
+  cloneToRoot(): DataModel {
+    const currentParent = this.parent;
+
+    if (!currentParent)
+      return this;
+
+    this.parent = currentParent.clone({shallow: true});
+    this.parent._children[this.key] = this;
+
+    currentParent.forEachChild((key: string, child: DataModel) => {
+      if (key !== this.key) {
+        this.parent._children[key] = child;
+      }
+    });
+
+    return this.parent.cloneToRoot();
   }
 
   toObject(): object | boolean | string | number | any[] | null {
@@ -206,7 +241,10 @@ export class DataModel {
     const childKeys = Object.getOwnPropertyNames(this._children).sort();
 
     for (let i = 0, l = childKeys.length; i < l; i++) {
-      fn(childKeys[i], this._children[childKeys[i]]);
+      let child = this._children[childKeys[i]];
+      if (child.exists()) {
+        fn(childKeys[i], child);
+      }
     }
   }
 

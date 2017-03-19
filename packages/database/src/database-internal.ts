@@ -653,19 +653,17 @@ export class DatabaseInternal {
      I should probably do some complexity calculations to figure it out, and some perf benchmarking wouldn't hurt.
      */
 
-    // TODO: take query (tag) into account. It might affect child added/removed
-
     // Keep the current state of the model at this path
     const oldModel = this._model.child(path);
 
-    // Clone the whole model and set it as the current one
-    this._model = this._model.clone();
+    // Clone the model at this path, discarding any data it may have, and update it with the new data
+    const newModel = oldModel.clone({keepData: false}).setData(value);
 
-    // Update the model with the new data
-    const newModel = this._model.child(path).setData(value);
+    // Set the new model's root as the current one
+    this._model = newModel.cloneToRoot();
 
     // Trigger notication events for the listeners
-    this._notifier.trigger(path, oldModel, newModel, tag, true);
+    this._notifier.trigger(path, oldModel, this._model.child(path), tag, true);
   }
 
   private processDataMessageWarnings(reqNumber: number, warnings: string[]) {

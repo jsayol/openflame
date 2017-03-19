@@ -79,6 +79,7 @@ export class Notifier {
     if (parentPath) {
 
       // TODO: detect and trigger "child_moved" events
+      // TODO: take query (tag) into account. It might affect child added/removed
 
       // Check for child added, removed, changed
       if (oldModel.exists()) {
