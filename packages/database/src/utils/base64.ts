@@ -21,32 +21,32 @@ function initCharMap() {
 export function fromByteArray(a) {
   initCharMap();
 
-  let d = [];
+  let result = [];
 
   for (let i = 0; i < a.length; i += 3) {
-    let f = a[i];
-    let g = i + 1 < a.length;
-    let h = g ? a[i + 1] : 0;
-    let k = i + 2 < a.length;
-    let l = k ? a[i + 2] : 0;
-    let m = f >> 2;
+    let byte1 = a[i];
+    let hasByte2 = (i + 1) < a.length;
+    let byte2 = hasByte2 ? a[i + 1] : 0;
+    let hasByte3 = (i + 2) < a.length;
+    let byte3 = hasByte3 ? a[i + 2] : 0;
+    let byte0 = byte1 >> 2;
 
-    f = (f & 3) << 4 | h >> 4;
-    h = (h & 15) << 2 | l >> 6;
-    l = l & 63;
+    byte1 = (byte1 & 3) << 4 | byte2 >> 4;
+    byte2 = (byte2 & 15) << 2 | byte3 >> 6;
+    byte3 = byte3 & 63;
 
 
-    if (!k) {
-      l = 64;
-      if (!g) {
-        h = 64;
+    if (!hasByte3) {
+      byte3 = 64;
+      if (!hasByte2) {
+        byte2 = 64;
       }
     }
 
-    d.push(byteToCharMap[m], byteToCharMap[f], byteToCharMap[h], byteToCharMap[l]);
+    result.push(byteToCharMap[byte0], byteToCharMap[byte1], byteToCharMap[byte2], byteToCharMap[byte3]);
   }
 
-  return d.join('');
+  return result.join('');
 }
 
 /**
