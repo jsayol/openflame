@@ -51,7 +51,8 @@ export class Notifier {
           oldModel: DataModel,
           newModel: DataModel,
           tag = 0,
-          bubbleUp = false,
+          bubbleUpValue = false,
+          bubbleUpChildChangedUntil: Path = null,
           downLevels = Infinity,
           _subject?: Subject<NotifierEvent>) {
 
@@ -64,7 +65,7 @@ export class Notifier {
         downLevels -= 1;
 
         newModel.forEachChild((key: string, child: DataModel) => {
-          this.trigger(path.child(key), oldModel.child(key), child, tag, false, downLevels);
+          this.trigger(path.child(key), oldModel.child(key), child, tag, false, path, downLevels, _subject);
         });
       }
     }
@@ -73,32 +74,47 @@ export class Notifier {
     // some other subject. For example, when emiting cached data for a single listener.
     const subject = _subject || this._subject;
 
-    // TODO: detect and trigger "child_moved" events
+    let parentPath = path.parent;
 
-    // Check for child added, removed, changed
-    if (oldModel.exists()) {
-      if (!newModel.hasChildren()) {
+    if (parentPath) {
+
+      // TODO: detect and trigger "child_moved" events
+
+      // Check for child added, removed, changed
+      if (oldModel.exists()) {
         if (!newModel.exists()) {
           // Trigger "child_removed" on the parent for this node
           if (path.parent)
-            subject.next({type: 'child_removed', path: path.parent, model: oldModel, tag});
+            subject.next({type: 'child_removed', path: parentPath, model: oldModel, tag});
 
           // Trigger value and child_removed for any descendants
           this.cascadeNodeRemoved(path, oldModel, tag, false);
         } else {
-          if (path.parent)
-            subject.next({type: 'child_changed', path: path.parent, model: newModel, tag});
+          // Trigger "child changed" event for this node
+          subject.next({type: 'child_changed', path: parentPath, model: newModel, tag});
+        }
+      } else {
+        if (newModel.exists()) {
+          subject.next({type: 'child_added', path: parentPath, model: newModel, tag});
         }
       }
-    } else {
-      if (newModel.exists() && path.parent) {
-        subject.next({type: 'child_added', path: path.parent, model: newModel, tag});
+
+      // Bubble up a "child_changed" event for any ancestors of this
+      // node's parent (up to the specified one to avoid duplicate events)
+      let model = newModel.parent;
+      parentPath = parentPath.parent;
+
+      while (parentPath && !parentPath.includesOrEqualTo(bubbleUpChildChangedUntil)) {
+        subject.next({type: 'child_changed', path: parentPath, model: model, tag});
+        parentPath = parentPath.parent;
+        model = model.parent;
       }
     }
 
     subject.next({type: 'value', path: path, model: newModel, tag});
 
-    if (bubbleUp) {
+    if (bubbleUpValue) {
+      // bubble up a "value" event for any ancestors of this node
       let bubbleUpModel = newModel;
       let bubbleUpPath = path;
 

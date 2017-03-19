@@ -158,7 +158,7 @@ export class DatabaseInternal {
         const downLevels = type === 'value' ? 0 : 1;
         const newModel = this._model.child(query.path);
         const oldModel = new DataModel(newModel.key, newModel.parent);
-        this._notifier.trigger(query.path, oldModel, newModel, newListener.tag, false, downLevels, current$);
+        this._notifier.trigger(query.path, oldModel, newModel, newListener.tag, false, null, downLevels, current$);
       });
     }
 

@@ -28,7 +28,7 @@ export class Path {
   }
 
   isEqual(otherPath: Path): boolean {
-    return this.toString() === otherPath.toString();
+    return otherPath && (this.toString() === otherPath.toString());
   }
 
   /**
@@ -43,6 +43,9 @@ export class Path {
    * @returns {boolean}
    */
   includes(otherPath: Path): boolean {
+    if (!otherPath)
+      return false;
+
     if (this._parts.length >= otherPath.length)
       return false;
 
