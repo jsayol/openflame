@@ -1,6 +1,6 @@
 {
   "name": "@openflame/database",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "description": "Database component for Openflame: An alternative, RxJS-based SDK for Firebase",
   "author": "Josep Sayol <josep.sayol@gmail.com>",
   "main": "release/bundles/database.umd.js",
@@ -23,14 +23,14 @@
     "url": "https://github.com/jsayol/openflame.git"
   },
   "peerDependencies": {
-    "@openflame/core": "0.0.5",
+    "@openflame/core": "0.0.6",
     "rxjs": "^5.2.0"
   },
   "dependencies": {
     "tslib": "^1.6.0"
   },
   "devDependencies": {
-    "@openflame/core": "0.0.5",
+    "@openflame/core": "0.0.6",
     "cpy-cli": "^1.0.1",
     "cross-env": "^3.2.3",
     "rimraf": "^2.6.1",
