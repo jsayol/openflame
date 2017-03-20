@@ -11,10 +11,10 @@
     "clean": "lerna run clean",
     "postinstall": "lerna bootstrap",
     "reboot": "yarn run clean && lerna clean --yes && lerna bootstrap",
-    "publish": "lerna publish --skip-npm --exact -m \"chore: release new version\" && yarn run build && yarn run publish:core && yarn run publish:database && yarn run publish:auth",
-    "publish:core": "lerna run --scope @openflame/core publish",
-    "publish:database": "lerna run --scope @openflame/database publish",
-    "publish:auth": "lerna run --scope @openflame/auth publish"
+    "publish": "lerna publish --skip-npm --exact -m \"chore: release new version\" && npm run build && npm run publish:core && npm run publish:database && npm run publish:auth",
+    "publish:core": "cd packages/core && npm run publish",
+    "publish:database": "cd packages/database && npm run publish",
+    "publish:auth": "cd packages/auth && npm run publish"
   },
   "devDependencies": {
     "awesome-typescript-loader": "^3.1.2",
