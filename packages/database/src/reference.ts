@@ -4,6 +4,8 @@ import { Path } from './path';
 import { OnDisconnect } from './on-disconnect';
 import { NotifierEvent } from './notifier';
 import { generatePushKey } from './utils/push-key';
+import { DataSnapshot } from './data-snapshot';
+import { Transaction } from './transaction';
 
 export class Reference extends Query {
   private _onDisconnect: OnDisconnect;
@@ -113,6 +115,14 @@ export class Reference extends Query {
       '.value': value,
       '.priority': priority,
     });
+  }
+
+  transaction(updateFunc: (value: any) => any,
+              onComplete: (err: Error | null, commited: boolean, snap: DataSnapshot) => any,
+              applyLocally = true): Promise<any> {
+
+    const transaction = new Transaction(this, this._db, updateFunc, onComplete, applyLocally);
+    return transaction.promise;
   }
 
 }

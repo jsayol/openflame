@@ -290,6 +290,10 @@ export class DatabaseInternal {
     return this._serverInfo.timeDiff;
   }
 
+  get model(): DataModel {
+    return this._model;
+  }
+
   private init() {
     const dbURLmatch = this._databaseURL.trim().match(/^http(s?):\/\/(([^\.]+)\.(.+))$/);
 

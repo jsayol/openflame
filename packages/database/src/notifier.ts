@@ -51,7 +51,7 @@ export class Notifier {
           event.optimisticEvents.push(event);
         }
       })
-      .map((event: NotifierEvent): DataSnapshot => new DataSnapshot(listener.query, event.model));
+      .map((event: NotifierEvent): DataSnapshot => new DataSnapshot(listener.query, event.model, !!event.optimisticEvents));
   }
 
   trigger(path: Path,

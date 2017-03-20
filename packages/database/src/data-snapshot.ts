@@ -6,7 +6,8 @@ export class DataSnapshot {
   private _ref: Reference;
 
   constructor(private _query: Query,
-              private _model: DataModel) {
+              private _model: DataModel,
+              public optimistic = false) {
   }
 
   get key(): string | null {

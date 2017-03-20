@@ -299,6 +299,15 @@ export class DataModel {
     return str !== '' ? base64Sha1(str) : '';
   }
 
+  /**
+   * Return the hash for any given value
+   * @param value
+   * @returns {string}
+   */
+  static getHash(value: any) {
+    return new DataModel(null, null, value).hash;
+  }
+
 }
 
 interface CloneOptions {
