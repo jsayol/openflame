@@ -3,9 +3,9 @@ import { Query } from './query';
 import { Path } from './path';
 import { OnDisconnect } from './on-disconnect';
 import { NotifierEvent } from './notifier';
+import { Transaction, TransactionOptions, TransactionResult } from './transaction';
 import { generatePushKey } from './utils/push-key';
 import { DataSnapshot } from './data-snapshot';
-import { Transaction } from './transaction';
 
 export class Reference extends Query {
   private _onDisconnect: OnDisconnect;
@@ -117,11 +117,17 @@ export class Reference extends Query {
     });
   }
 
+  /**
+   * Transaction
+   * @param updateFunc
+   * @param onComplete
+   * @param options
+   * @returns {Promise<TransactionResult>}
+   */
   transaction(updateFunc: (value: any) => any,
               onComplete: (err: Error | null, commited: boolean, snap: DataSnapshot) => any,
-              applyLocally = true): Promise<any> {
-
-    const transaction = new Transaction(this, this._db, updateFunc, onComplete, applyLocally);
+              options: TransactionOptions = {}): Promise<TransactionResult> {
+    const transaction = new Transaction(this, this._db, updateFunc, onComplete, options);
     return transaction.promise;
   }
 
@@ -129,7 +135,7 @@ export class Reference extends Query {
 
 /**
  * NOTE: This class should ideally be on a separate file but it needs to stay here
- * for now due to a TypeScript bug: https://github.com/Microsoft/TypeScript/issues/14734
+ * for now due to a bug with Webpack: https://github.com/webpack/webpack/issues/4520
  */
 export class ThenableReference extends Reference {
   private _promise: Promise<void>;
@@ -152,3 +158,5 @@ export class ThenableReference extends Reference {
     return this._promise.catch<T>(onrejected);
   }
 }
+
+export { TransactionOptions, TransactionResult } from './transaction';

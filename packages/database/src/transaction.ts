@@ -1,50 +1,72 @@
 import { DataSnapshot } from './data-snapshot';
 import { Reference } from './reference';
 import { DataModel } from './data-model';
-import { NotifierEvent } from './notifier';
 import { DatabaseInternal } from './database-internal';
 import { Subscription } from 'rxjs';
 import { async as asyncScheduler } from 'rxjs/scheduler/async';
 import 'rxjs/add/operator/observeOn';
 
+/**
+ * @internal
+ */
 export class Transaction {
   private _promise: Promise<TransactionResult>;
-  private _resolve: Function;
-  private _reject: Function;
-  private _value: any;
-  private _waitingValue = false;
+  private _resolve: (value?: TransactionOptions) => void;
+  private _reject: (reason?: any) => void;
+  private _applyLocally: boolean;
+  private _maxTries: number;
+  private _numTries = 0;
+  private _knownValue: any;
+  private _lastTriedValue: any;
+  private _waitingForValue = false;
   private _subscription: Subscription;
 
   constructor(private _ref: Reference,
               private _db: DatabaseInternal,
               private _updateFunc: (value: any) => any,
               private _onComplete: (err: Error | null, commited: boolean, snap: DataSnapshot) => any,
-              private _applyLocally = true) {
+              {applyLocally = true, maxTries = Infinity}: TransactionOptions) {
 
-    this._promise = new Promise((resolve: Function, reject: Function) => {
+    this._applyLocally = applyLocally;
+    this._maxTries = maxTries;
+
+    this._promise = new Promise((resolve: (value?: any) => void, reject: (reason?: any) => void) => {
       this._resolve = resolve;
       this._reject = reject;
     });
 
-    this._subscription = this._ref.value$.observeOn(asyncScheduler).subscribe((snap: DataSnapshot) => {
-      // Ignore any optimistic update, since it *probably* was triggered by the transaction itself
-      // FIXME: what happens if this optimistic update came from elsewhere? The transaction might end up in limbo
-      if (!snap.optimistic) {
-        this._value = snap.val();
+    this._subscription = this._ref.value$.observeOn(asyncScheduler).subscribe(
+      (snap: DataSnapshot) => {
+        const value = snap.val();
 
-        if (this._waitingValue) {
-          this._waitingValue = false;
-          this.go();
+        // If _applyLocally is true, here we will also recieve notifications for the values we just tried ourselves.
+        // In that case, only update the known value if it's different from the one we just tried.
+        if (!this._applyLocally || (DataModel.getHash(this._lastTriedValue) !== DataModel.getHash(value))) {
+          this._knownValue = value;
+
+          if (this._waitingForValue) {
+            this._waitingForValue = false;
+            this.go();
+          }
         }
-      }
-    });
+      },
+
+      // Handle if the observable ends with an error
+      (error: any) => this.error(error),
+
+      // Handle if the observable completes before the transaction has been committed
+      () => this.finished(false),
+    );
 
     try {
-      this._value = this._db.model.child(this._ref.path).toObject();
+      this._knownValue = this._db.model.child(this._ref.path).toObject();
       this.go();
-    } catch (err) {
-      this._subscription.unsubscribe();
-      throw err;
+    } catch (error) {
+      if (!this._subscription.closed) {
+        this._subscription.unsubscribe();
+      }
+      this.error(error);
+      throw error;
     }
   }
 
@@ -53,7 +75,13 @@ export class Transaction {
   }
 
   private go() {
-    const previousValue = this._value;
+    if (this._numTries >= this._maxTries) {
+      // We've reached the maximum number of tries that were requested
+      this.finished(false);
+      return;
+    }
+
+    const previousValue = this._knownValue;
     const newValue = this._updateFunc(previousValue);
 
     // TODO: if `newValue` is an object, check its keys for invalid paths
@@ -64,47 +92,52 @@ export class Transaction {
     }
 
     this.set(previousValue, newValue)
-      .then((commitedValue: any) => {
-        this._value = commitedValue;
+      .then((committedValue: any) => {
+        this._knownValue = committedValue;
         this.finished(true);
       })
       .catch((error: Error) => {
         const errorCode = error.message.split(' ').shift();
 
         if (errorCode === 'datastale') {
-          // Transaction failed
+          // Transaction failed because we had stale data
 
-          if (this._value === previousValue) {
+          if (this._knownValue === previousValue) {
             // Value hasn't changed, let's wait
-            this._waitingValue = true;
+            this._waitingForValue = true;
           } else {
-            console.log('Retrying', previousValue, this._value);
             // Let's retry
             this.go();
           }
         } else {
-          // Oops, something went wrong. Abort the transaction.
+          // Oops, something went wrong. End the transaction with an error
           this.error(error);
         }
       });
   }
 
   private snapshot(): DataSnapshot {
-    return new DataSnapshot(this._ref, new DataModel(this._ref.key, null, this._value));
+    return new DataSnapshot(this._ref, new DataModel(this._ref.key, null, this._knownValue));
   }
 
-  private finished(commited: boolean) {
+  private finished(committed: boolean) {
     if (!this._subscription.closed) {
       this._subscription.unsubscribe();
     }
 
+    // If we applied any updates locally but the transaction wasn't committed, let's
+    // do one final local update with the known (hopefully correct) value
+    if (!committed && this._applyLocally && this._numTries) {
+      this._db.updateModel(this._ref.path, this._knownValue);
+    }
+
     const snapshot = this.snapshot();
 
-    this._resolve({commited, snapshot});
-
     if (this._onComplete) {
-      this._onComplete(null, commited, snapshot);
+      this._onComplete(null, committed, snapshot);
     }
+
+    this._resolve(<TransactionResult>{committed, snapshot});
   }
 
   private error(error: Error) {
@@ -112,21 +145,25 @@ export class Transaction {
       this._subscription.unsubscribe();
     }
 
-    this._reject(error);
+    // If we applied any updates locally, let's do one final local update with
+    // the known (hopefully correct) value
+    if (this._applyLocally && this._numTries) {
+      this._db.updateModel(this._ref.path, this._knownValue);
+    }
 
     if (this._onComplete) {
       this._onComplete(error, false, this.snapshot());
     }
+
+    this._reject(error);
   }
 
   private set(previousValue: any, newValue: any): Promise<any> {
-    let optimisticEvents: NotifierEvent[];
+    this._numTries += 1;
+    this._lastTriedValue = newValue;
 
     if (this._applyLocally) {
-      // Do an optimistic update
-      // FIXME: This optimistic updates shouldn't be rolled back unless the transaction ends uncommited
-      optimisticEvents = [];
-      this._db.updateModel(this._ref.path, newValue, {optimisticEvents});
+      this._db.updateModel(this._ref.path, newValue);
     }
 
     return this._db
@@ -134,12 +171,17 @@ export class Transaction {
         p: this._ref.path.toString(),
         d: newValue,
         h: DataModel.getHash(previousValue)
-      }, optimisticEvents);
+      });
   }
 
 }
 
 export interface TransactionResult {
-  commited: boolean;
+  committed: boolean;
   snapshot: DataSnapshot;
+}
+
+export interface TransactionOptions {
+  applyLocally?: boolean;
+  maxTries?: number;
 }

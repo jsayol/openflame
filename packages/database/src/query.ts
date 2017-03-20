@@ -208,6 +208,9 @@ export abstract class Query {
 
 }
 
+/**
+ * @internal
+ */
 export interface QueryOptions {
   limit?: number;
   limitFrom?: 'l' | 'r';
