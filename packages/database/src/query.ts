@@ -170,31 +170,31 @@ export abstract class Query {
    * @returns {Object}
    */
   toObject(): object | null {
-    const q: object = {};
+    const queryObject: QueryObject = {};
     let hasQuery = false;
 
     if (this._queryOptions.limitFrom) {
-      q['l'] = this._queryOptions.limit;
-      q['vf'] = this._queryOptions.limitFrom;
+      queryObject.l = this._queryOptions.limit;
+      queryObject.vf = this._queryOptions.limitFrom;
       hasQuery = true;
     }
 
     if (this._queryOptions.orderBy) {
-      q['i'] = this._queryOptions.index;
+      queryObject.i = this._queryOptions.index;
       hasQuery = true;
     }
 
     if (typeof this._queryOptions.startAt !== 'undefined') {
-      q['sp'] = this._queryOptions.startAt;
+      queryObject.sp = this._queryOptions.startAt;
       hasQuery = true;
     }
 
     if (typeof this._queryOptions.endAt !== 'undefined') {
-      q['ep'] = this._queryOptions.endAt;
+      queryObject.ep = this._queryOptions.endAt;
       hasQuery = true;
     }
 
-    return hasQuery ? q : null;
+    return hasQuery ? queryObject : null;
   }
 
   hasQuery(): boolean {
@@ -204,6 +204,18 @@ export abstract class Query {
       || (typeof this._queryOptions.startAt !== 'undefined')
       || (typeof this._queryOptions.endAt !== 'undefined')
     );
+  }
+
+  /**
+   * Method used internally to manually set the query options object for this query
+   * @param queryOptions
+   * @returns {Query}
+   * @private
+   * @internal
+   */
+  _setOptions(queryOptions: QueryOptions | null): Query {
+    this._queryOptions = queryOptions || {};
+    return this;
   }
 
 }
@@ -218,6 +230,17 @@ export interface QueryOptions {
   index?: string;
   startAt?: any;
   endAt?: any;
+}
+
+/**
+ * @internal
+ */
+export interface QueryObject {
+  l?: number;
+  vf?: 'r' | 'l';
+  i?: string;
+  sp?: any;
+  ep?: any;
 }
 
 interface OffNotification {

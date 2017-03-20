@@ -3,6 +3,7 @@ import { DataSnapshot } from './data-snapshot';
 import { DataModel } from './data-model';
 import { Path } from './path';
 import { Subject } from 'rxjs/Subject';
+import { Observer } from 'rxjs/Observer';
 import { Observable, ObservableInput } from 'rxjs/Observable';
 import 'rxjs/add/operator/do';
 import 'rxjs/add/operator/map';
@@ -31,27 +32,36 @@ export class Notifier {
   }
 
   forListener(listener: DataListener, mergeWith?: ObservableInput<NotifierEvent>): Observable<DataSnapshot> {
-    let notifier$ = this._subject.asObservable();
+    return Observable.create((observer: Observer<DataSnapshot>) => {
+      let notifier$ = this._subject.asObservable();
 
-    if (mergeWith) {
-      notifier$ = notifier$.merge(mergeWith);
-    }
+      if (mergeWith) {
+        notifier$ = notifier$.merge(mergeWith);
+      }
 
-    return notifier$
-      .filter((event: NotifierEvent): boolean => {
-        // TODO: take query options into account
+      const subscription = notifier$
+        .filter((event: NotifierEvent): boolean => {
+          // TODO: take query options into account
 
-        return (!event.tag || (event.tag === listener.tag))
-          && (event.type === listener.type)
-          && listener.query.path.isEqual(event.path);
-      })
-      .do((event: NotifierEvent) => {
-        // Let's keep track of all the "optimistic" updates in case we need to roll them back
-        if (event.optimisticEvents) {
-          event.optimisticEvents.push(event);
-        }
-      })
-      .map((event: NotifierEvent): DataSnapshot => new DataSnapshot(listener.query, event.model, !!event.optimisticEvents));
+          return (!event.tag || (event.tag === listener.tag))
+            && (event.type === listener.type)
+            && listener.query.path.isEqual(event.path);
+        })
+        .do((event: NotifierEvent) => {
+          // Let's keep track of all the "optimistic" updates in case we need to roll them back
+          if (event.optimisticEvents) {
+            event.optimisticEvents.push(event);
+          }
+        })
+        .map((event: NotifierEvent): DataSnapshot => new DataSnapshot(listener.query, event.model, !!event.optimisticEvents))
+        .subscribe(observer);
+
+      // Store the observer inside its DataListener
+      listener.observer = observer;
+
+      return () => subscription.unsubscribe();
+    });
+
   }
 
   trigger(path: Path,

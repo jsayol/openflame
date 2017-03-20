@@ -1,7 +1,9 @@
 import { Subject } from 'rxjs/Subject';
+import { Observer } from 'rxjs/Observer';
 import { Observable } from 'rxjs/Observable';
 import { Subscription } from 'rxjs/Subscription';
 import { WebSocketSubject } from 'rxjs/observable/dom/WebSocketSubject';
+import { async as asyncScheduler } from 'rxjs/scheduler/async';
 import 'rxjs/add/operator/map';
 import 'rxjs/add/operator/merge';
 import 'rxjs/add/operator/share';
@@ -10,9 +12,9 @@ import 'rxjs/add/operator/observeOn';
 import 'rxjs/add/observable/of';
 import 'rxjs/add/observable/from';
 import 'rxjs/add/observable/dom/webSocket';
-import { async as asyncScheduler } from 'rxjs/scheduler/async';
 
-import { Query } from './query';
+import { Reference } from './reference';
+import { Query, QueryObject } from './query';
 import { Path } from './path';
 import { DataModel } from './data-model';
 import { DataSnapshot } from './data-snapshot';
@@ -179,49 +181,61 @@ export class DatabaseInternal {
       });
   }
 
-  removeListener(listenerToRemove: DataListener) {
-    let shouldRemoveWatch = listenerToRemove.isActive;
+  removeListener(listenerToRemove: DataListener, removeWatch = true): Promise<void> {
+    return new Promise<void>((resolve: (v?: any) => void, reject: (r?: any) => void) => {
+      try {
+        let shouldRemoveWatch = listenerToRemove.isActive && removeWatch;
+        const promises: Promise<any>[] = [];
 
-    const newListenersList: DataListener[] = [];
+        const newListenersList: DataListener[] = [];
 
-    // Let's check if we need to remove the watch or re-activate any listener
-    this._dataListeners.forEach((listener: DataListener) => {
+        // Let's check if we need to remove the watch or re-activate any listener
+        this._dataListeners.forEach((listener: DataListener) => {
 
-      if (listener !== listenerToRemove) {
-        newListenersList.push(listener);
+          if (listener !== listenerToRemove) {
+            newListenersList.push(listener);
 
-        const path = listener.query.path;
-        const toRemovePath = listenerToRemove.query.path;
+            const path = listener.query.path;
+            const toRemovePath = listenerToRemove.query.path;
 
-        if (listenerToRemove.isActive && !listener.isActive && !listenerToRemove.query.hasQuery() && toRemovePath.includesOrEqualTo(path)) {
-          // The listener we're removing is active and masks this one.
+            if (listenerToRemove.isActive && !listener.isActive && !listenerToRemove.query.hasQuery() && toRemovePath.includesOrEqualTo(path)) {
+              // The listener we're removing is active and masks this one.
 
-          if (!this.isListenerMaskedByAnyOther(listener)) {
-            // This listener is not masked by any other listener, let's re-activate it
-            // TODO: here's where we need to compute the hash to avoid triggering new data from the server
-            listener.isActive = true;
-            this.addServerWatch(listener.query, listener.tag);
+              if (!this.isListenerMaskedByAnyOther(listener)) {
+                // This listener is not masked by any other listener, let's re-activate it
+                // TODO: here's where we need to compute the hash to avoid triggering new data from the server
+                listener.isActive = true;
+                promises.push(this.addServerWatch(listener.query, listener.tag));
+              }
+            }
+
+            if (shouldRemoveWatch && path.isEqual(toRemovePath) && listener.query.isEqual(listenerToRemove.query)) {
+              // This other listener has the same path and same query as the one we're removing,
+              // so we can't remove the server watch
+              shouldRemoveWatch = false;
+            }
+
           }
+        });
+
+        if (shouldRemoveWatch) {
+          console.log('Removing watch', new Error('' + removeWatch));
+          promises.push(this.removeServerWatch(listenerToRemove.query, listenerToRemove.tag));
         }
 
-        if (shouldRemoveWatch && path.isEqual(toRemovePath) && listener.query.isEqual(listenerToRemove.query)) {
-          // This other listener has the same path and same query as the one we're removing,
-          // so we can't remove the server watch
-          shouldRemoveWatch = false;
-        }
+        listenerToRemove.isActive = false;
+        this._dataListeners = newListenersList;
 
+        // TODO: check model, we might be able to delete parts of it at this point
+
+        // Wait for all promises before resolving
+        Promise.all(promises).then(resolve);
+
+      } catch (error) {
+        reject(error);
       }
 
     });
-
-    if (shouldRemoveWatch) {
-      this.removeServerWatch(listenerToRemove.query, listenerToRemove.tag);
-    }
-
-    this._dataListeners = newListenersList;
-
-    // TODO: check model, we might be able to delete parts of it at this point
-
   }
 
   sendDataMessage(type: string, query: Query | null, payload: any, optimisticEvents?: NotifierEvent[]): Promise<any> {
@@ -422,7 +436,7 @@ export class DatabaseInternal {
     return this.sendDataMessage('q', null, payload);
   }
 
-  private removeServerWatch(query: Query, tag: number) {
+  private removeServerWatch(query: Query, tag: number): Promise<any> {
     const payload = {
       p: query.path.toString(),
     };
@@ -432,7 +446,7 @@ export class DatabaseInternal {
       payload['q'] = query.toObject();
     }
 
-    this.sendDataMessage('n', null, payload);
+    return this.sendDataMessage('n', null, payload);
   }
 
   private processMessage(msg: object) {
@@ -518,6 +532,10 @@ export class DatabaseInternal {
           // Authentication?
           console.log('Auth message received:', data.b);
           break;
+        case 'c':
+          // We have lost read permission at a certain path/query
+          this.processPermissionCancellation(<string>data.b.p, <QueryObject>data.b.q);
+          break;
         default:
           console.info('Unknown data message (a):', msg);
       }
@@ -566,6 +584,17 @@ export class DatabaseInternal {
 
       delete this._sentRequests[reqNumber];
     }
+  }
+
+  private processPermissionCancellation(pathStr: string, queryObject: QueryObject | null) {
+    const query = new Reference(pathStr, this)._setOptions(queryObject);
+
+    this._dataListeners.forEach((listener: DataListener) => {
+      if (listener.query.isEqual(query)) {
+        this.removeListener(listener, false);
+        listener.observer.error(new Error(`permission_denied at ${query.path}: Client doesn't have permission to access the desired data.`));
+      }
+    });
   }
 
   /**
@@ -767,4 +796,5 @@ export interface DataListener {
   type: EventType;
   isActive: boolean;
   tag: number;
+  observer?: Observer<DataSnapshot>;
 }
