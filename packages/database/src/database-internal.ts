@@ -331,7 +331,7 @@ export class DatabaseInternal {
   private connect() {
     let url = `ws${this._useTLS ? 's' : ''}://${this._host}/.ws?v=5` + (this._useProjectName ? `&ns=${this._projectName}` : '');
 
-    this._socket$ = Observable.webSocket<any>(url);
+    this._socket$ = Observable.webSocket<any>({url, resultSelector: websocketResultSelector()});
 
     this._connection = this._socket$.subscribe(
       (msg: object) => this.processMessage(msg),
@@ -374,6 +374,8 @@ export class DatabaseInternal {
   }
 
   private send(data) {
+    // The official SDK splits websocket messages in frames no larger than 16 KiB, but
+    // the server seems to accept longer messages just fine.
     this._socket$.next(JSON.stringify(data));
     this.scheduleKeepAlive();
   }
@@ -449,7 +451,11 @@ export class DatabaseInternal {
     return this.sendDataMessage('n', null, payload);
   }
 
-  private processMessage(msg: object) {
+  private processMessage(msg: object | null) {
+    if (!msg) {
+      return;
+    }
+
     switch (msg['t']) {
       case 'c':
         this.processConnectionMessage(msg);
@@ -755,7 +761,6 @@ export class DatabaseInternal {
   }
 }
 
-
 /**
  *
  */
@@ -797,4 +802,48 @@ export interface DataListener {
   isActive: boolean;
   tag: number;
   observer?: Observer<DataSnapshot>;
+}
+
+function websocketResultSelector(): (e: MessageEvent) => any {
+  let _pendingFrames: number;
+  let _buffer: string;
+
+  return (e: MessageEvent): any => {
+    if (_pendingFrames) {
+      // FIXME: string concatenation might not be the most performant approach. Maybe ArrayBuffers? Look into it.
+      _buffer += e.data;
+
+      if (--_pendingFrames) {
+        // Return null if there's pending frames
+        return null;
+      }
+
+      if ((typeof _buffer === 'undefined') || !_buffer.length) {
+        // There should be data in the buffer by now, but return null in case there isn't
+        return null;
+      }
+
+      // Parse the JSON buffer
+      const parsed = JSON.parse(_buffer);
+
+      // Clear the buffer and the pending counter
+      _pendingFrames = void 0;
+      _buffer = void 0;
+
+      return parsed;
+    } else if (e.data.length) {
+      if (isNaN(e.data[0])) {
+        // We're getting a whole message in a single frame
+        return JSON.parse(e.data);
+      } else {
+        // The server is telling us how many frames compose the next message
+        _pendingFrames = parseInt(e.data);
+        _buffer = '';
+        return null;
+      }
+    } else {
+      // We got an empty frame. Shouldn't happen but let's handle it gracefully just in case
+      return null;
+    }
+  }
 }
