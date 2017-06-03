@@ -1,3 +1,5 @@
+## Note: As of version 4.0, [the official Firebase JavaScript SDK](https://github.com/firebase/firebase-js-sdk) has been opensourced! For that reason, I won't continue working on expanding or maintaning Openflame. I'm leaving the repo up as a curiosity.
+
 # Openflame
 :fire: :fire: :fire: ![stability-experimental](https://img.shields.io/badge/stability-experimental-orange.svg) :fire: :fire: :fire:
 
